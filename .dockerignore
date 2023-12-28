@@ -11,7 +11,6 @@ test-results/
 # Compiled Object files
 *.slo
 *.lo
-*.o
 *.obj
 
 # Precompiled Headers
@@ -30,12 +29,10 @@ test-results/
 # Compiled Static libraries
 *.lai
 *.la
-*.a
 *.lib
 
 # Executables
 *.exe
-*.out
 *.app
 
 
@@ -45,8 +42,6 @@ test-results/
 
 # Compiled Python Sources
 __pycache__
-*.pyc
-
 # Virtual Environment
 venv
 .venv
@@ -61,6 +56,15 @@ venv
 
 # CMake (CLion)
 cmake-build*/
+# В текущий момент нет возможности указать wildcard для пути исключения: https://github.com/moby/moby/issues/30018
+!cmake-build/bin/ua
+!cmake-build/UAServerTest
+!cmake-build/*.deb
+!cmake-build-debug/UAServerTest
+!cmake-build-debug/*.deb
+!cmake-build-release/UAServerTest
+!cmake-build-release/*.deb
+!lib/opcua/test/idsmart/connector/open62541cpp/server_nodeset/libidsmart-connector-ex-nodeset.so
 
 
 ##########################
@@ -100,8 +104,6 @@ tags
 #############
 ### Linux ###
 #############
-
-*~
 
 # temporary files which can be created if a process still has a handle open of a deleted file
 .fuse_hidden*
@@ -147,7 +149,3 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-#############
-### NodeJS ###
-#############
-/node_modules/
