@@ -1,0 +1,1136 @@
+<?xml version='1.0' encoding='utf-8'?>
+<UANodeSet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:uax="http://opcfoundation.org/UA/2008/02/Types.xsd" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd">
+  <NamespaceUris>
+        <Uri>https://second/nodeset</Uri>
+        <Uri>https://second/nodeset2</Uri>
+  </NamespaceUris>
+  <Aliases>
+    <Alias Alias="Boolean">i=1</Alias>
+    <Alias Alias="SByte">i=2</Alias>
+    <Alias Alias="Byte">i=3</Alias>
+    <Alias Alias="Int16">i=4</Alias>
+    <Alias Alias="UInt16">i=5</Alias>
+    <Alias Alias="Int32">i=6</Alias>
+    <Alias Alias="UInt32">i=7</Alias>
+    <Alias Alias="Int64">i=8</Alias>
+    <Alias Alias="UInt64">i=9</Alias>
+    <Alias Alias="Float">i=10</Alias>
+    <Alias Alias="Double">i=11</Alias>
+    <Alias Alias="String">i=12</Alias>
+    <Alias Alias="DateTime">i=13</Alias>
+    <Alias Alias="Guid">i=14</Alias>
+    <Alias Alias="ByteString">i=15</Alias>
+    <Alias Alias="XmlElement">i=16</Alias>
+    <Alias Alias="NodeId">i=17</Alias>
+    <Alias Alias="ExpandedNodeId">i=18</Alias>
+    <Alias Alias="StatusCode">i=19</Alias>
+    <Alias Alias="QualifiedName">i=20</Alias>
+    <Alias Alias="LocalizedText">i=21</Alias>
+    <Alias Alias="Structure">i=22</Alias>
+    <Alias Alias="BaseDataType">i=24</Alias>
+    <Alias Alias="Number">i=26</Alias>
+    <Alias Alias="Integer">i=27</Alias>
+    <Alias Alias="UInteger">i=28</Alias>
+    <Alias Alias="Organizes">i=35</Alias>
+    <Alias Alias="HasTypeDefinition">i=40</Alias>
+    <Alias Alias="Duration">i=290</Alias>
+    <Alias Alias="NumericRange">i=291</Alias>
+    <Alias Alias="UtcTime">i=294</Alias>
+    <Alias Alias="ServerState">i=852</Alias>
+    <Alias Alias="ImagePNG">i=2003</Alias>
+  </Aliases>
+  <UAObject NodeId="ns=1;s=Demo.Static" BrowseName="1:Static" ParentNodeId="i=85">
+    <DisplayName>000_Static</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar</Reference>
+      <Reference ReferenceType="Organizes">ns=1;i=4294967294</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">i=85</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;s=Demo.Static.Arrays" BrowseName="1:Arrays" ParentNodeId="ns=1;s=Demo.Static">
+    <DisplayName>Arrays</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.BaseDataType</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.Boolean</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.Byte</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.ByteString</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.DateTime</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.Double</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.Duration</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.ExpandedNodeId</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.Float</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.Guid</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.ImagePNG</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.Int16</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.Int32</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.Int64</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.Integer</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.LocalizedText</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.NodeId</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.NumericRange</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.QualifiedName</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.SByte</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.ServerState</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.StatusCode</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.String</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.Structure</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.UInt16</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.UInt32</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.UInt64</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.UtcTime</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.Vector</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Arrays.XmlElement</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.BaseDataType" BrowseName="1:BaseDataType" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="BaseDataType">
+    <DisplayName>BaseDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <!--<Value> nodeset_loader - not implemented (16.11.2023) -->
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.Boolean" BrowseName="1:Boolean" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="Boolean" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Boolean</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfBoolean>
+        <uax:Boolean>true</uax:Boolean>
+        <uax:Boolean>true</uax:Boolean>
+        <uax:Boolean>true</uax:Boolean>
+        <uax:Boolean>true</uax:Boolean>
+        <uax:Boolean>true</uax:Boolean>
+        <uax:Boolean>true</uax:Boolean>
+        <uax:Boolean>true</uax:Boolean>
+        <uax:Boolean>true</uax:Boolean>
+        <uax:Boolean>true</uax:Boolean>
+        <uax:Boolean>true</uax:Boolean>
+      </uax:ListOfBoolean>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.Byte" BrowseName="1:Byte" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="Byte" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Byte</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfByte>
+        <uax:Byte>0</uax:Byte>
+        <uax:Byte>1</uax:Byte>
+        <uax:Byte>2</uax:Byte>
+        <uax:Byte>3</uax:Byte>
+        <uax:Byte>4</uax:Byte>
+        <uax:Byte>5</uax:Byte>
+        <uax:Byte>6</uax:Byte>
+        <uax:Byte>7</uax:Byte>
+        <uax:Byte>8</uax:Byte>
+        <uax:Byte>9</uax:Byte>
+      </uax:ListOfByte>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.ByteString" BrowseName="1:ByteString" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="ByteString" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>ByteString</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfByteString>
+        <uax:ByteString>ABAgMEBQYHA=</uax:ByteString>
+        <uax:ByteString>ECAwQFBgcIA=</uax:ByteString>
+        <uax:ByteString>IDBAUGBwgJA=</uax:ByteString>
+        <uax:ByteString>MEBQYHCAkKA=</uax:ByteString>
+        <uax:ByteString>QFBgcICQoLA=</uax:ByteString>
+        <uax:ByteString>UGBwgJCgsMA=</uax:ByteString>
+        <uax:ByteString>YHCAkKCwwNA=</uax:ByteString>
+        <uax:ByteString>cICQoLDA0OA=</uax:ByteString>
+        <uax:ByteString>gJCgsMDQ4PA=</uax:ByteString>
+        <uax:ByteString>kKCwwNDg8AA=</uax:ByteString>
+      </uax:ListOfByteString>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.DateTime" BrowseName="1:DateTime" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="DateTime" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>DateTime</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfDateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+      </uax:ListOfDateTime>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.Double" BrowseName="1:Double" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="Double" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Double</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfDouble>
+        <uax:Double>10.0</uax:Double>
+        <uax:Double>10.2</uax:Double>
+        <uax:Double>10.4</uax:Double>
+        <uax:Double>10.6</uax:Double>
+        <uax:Double>10.8</uax:Double>
+        <uax:Double>11.0</uax:Double>
+        <uax:Double>11.2</uax:Double>
+        <uax:Double>11.4</uax:Double>
+        <uax:Double>11.6</uax:Double>
+        <uax:Double>11.8</uax:Double>
+      </uax:ListOfDouble>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.Duration" BrowseName="1:Duration" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="Duration" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Duration</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfExtensionObject>
+        <uax:Double>10.0</uax:Double>
+        <uax:Double>10.2</uax:Double>
+        <uax:Double>10.4</uax:Double>
+        <uax:Double>10.6</uax:Double>
+        <uax:Double>10.8</uax:Double>
+        <uax:Double>11.0</uax:Double>
+        <uax:Double>11.2</uax:Double>
+        <uax:Double>11.4</uax:Double>
+        <uax:Double>11.6</uax:Double>
+        <uax:Double>11.8</uax:Double>
+      </uax:ListOfExtensionObject>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.ExpandedNodeId" BrowseName="1:ExpandedNodeId" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="ExpandedNodeId" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>ExpandedNodeId</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <!--<Value> nodeset_loader - not implemented (16.11.2023) -->
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.Float" BrowseName="1:Float" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="Float" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Float</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfFloat>
+        <uax:Float>20.0</uax:Float>
+        <uax:Float>20.100000381469727</uax:Float>
+        <uax:Float>20.200000762939453</uax:Float>
+        <uax:Float>20.299999237060547</uax:Float>
+        <uax:Float>20.399999618530273</uax:Float>
+        <uax:Float>20.5</uax:Float>
+        <uax:Float>20.600000381469727</uax:Float>
+        <uax:Float>20.700000762939453</uax:Float>
+        <uax:Float>20.799999237060547</uax:Float>
+        <uax:Float>20.899999618530273</uax:Float>
+      </uax:ListOfFloat>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.Guid" BrowseName="1:Guid" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="Guid" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Guid</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfGuid>
+        <uax:Guid>
+          <uax:String>32b0c087-edf8-4324-b393-c46d2787577f</uax:String>
+        </uax:Guid>
+        <uax:Guid>
+          <uax:String>67c03546-7317-4dc5-91d3-ffb08f06f546</uax:String>
+        </uax:Guid>
+        <uax:Guid>
+          <uax:String>5a2fb43b-f7dc-40f1-a28b-652530d47b4b</uax:String>
+        </uax:Guid>
+        <uax:Guid>
+          <uax:String>5462ce26-8cde-47a5-9fef-fd5b4877ec68</uax:String>
+        </uax:Guid>
+        <uax:Guid>
+          <uax:String>aa81cdce-9a5c-492c-82f2-67c63b52053b</uax:String>
+        </uax:Guid>
+        <uax:Guid>
+          <uax:String>fdb878bc-adca-4195-9a50-b3e5fddacc70</uax:String>
+        </uax:Guid>
+        <uax:Guid>
+          <uax:String>d3f22f62-d142-4cb7-8900-8e629ffa7dd0</uax:String>
+        </uax:Guid>
+        <uax:Guid>
+          <uax:String>988d697e-e19e-4306-af59-2c883be6884c</uax:String>
+        </uax:Guid>
+        <uax:Guid>
+          <uax:String>d8fe82f0-9800-47fc-8e5e-b75d7ce03958</uax:String>
+        </uax:Guid>
+        <uax:Guid>
+          <uax:String>2aaf3ab0-351e-4228-adb8-97b5856702b5</uax:String>
+        </uax:Guid>
+      </uax:ListOfGuid>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.ImagePNG" BrowseName="1:ImagePNG" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="ImagePNG" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>ImagePNG</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfExtensionObject>
+        <uax:ByteString>iVBORw0KGgoAAAANSUhEUgAAAFcAAABXCAYAAABxyNlsAAAAAXNSR0IArs4c6QAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAAN1wAADdcBQiibeAAAAAd0SU1FB9sKFQswO/tCyXYAABA0SURBVHja1V19lBTVlf/dquru6RlgxggMCyKgJpCIi5uoixFN3ITsrslZ1viBuG7Q4zFnnVnFGA6DnlU46Apmj4mT7AyEnLOGEBGCcRePJhsmEXKAMAooBJgBXRAGGZqvYT77u9/dP6pqurq7uvu97pnp9s15p6o/pupXv/q9++6979VrQhmW+vo6NDU1O18TgGoAYwCMYebpRDQdwBQAVwMYC+Az1uc+AF4ABCAKIAJgAMBFAF0AjgPoAHAUQBuASwD6AfQ0NTXHs2EopFCZkzoHwB0AbgIw0arVAMDMIBoS+P0AAgA6AfwZwG8B/MbGUQzJJSe3ru5RNDevti/EAFALYDGAfwVgWF9jF6w8BPhzHWMDgP8AcLipqTn2qSPXVkV9fZ0XwMMAFgC4Ne3is+EcbnLtcgDAZgDNTU3Nl+rr6wBASs1UBsR+HcBGy2ZS2kWnb5Hl82KIlTkGA4gDWNzU1Pxj2RNopSDVKhPr6+s2A2gBcHnaBVKWLfK8X0irlT2GB0BjfX3du3V1j14PAEuWLC4f5TrU+kUA26zencuxc82mYGYmIgoJIRavXr2m+ZZbvoxdu/5UWnIdxM4BsKMYUtM9BVmvgZkzWCqUYQDU19f36Pr1v1xTUuU6iL0MwMeWO6VkL20yNE2DpmkgAnp7+2Ld3T2hYHAgEQyGoqFQkIUQlEgIZmYYhk4AaX5/hV5ZWan7/X6jurraX11drWmaBiEEhBAFE83MaG9vf3rbtu0ry8EstDPzDCJS7Yg4FoslQqFQ7OTJjtPHjh375PTp0xcAfALgIyswOA/gLIBeK3iIWn2K16pjAYy36mdra2u/dM01V189derUK6qqqi7Xdd2jaZqS/8zMnEgkoi0tv//a8ePHd5XSLDwAYL2sYpmZdV2nixe7+g4e/PPFM2fO7L9w4eIWAIcAnLKILLYYACZNmzb185MnXzm3tnbcA7W1E8azWSCjZmZGW1vbH7dv/+NXS0JuXd2jBhH9jxVtSZ2TiLB3797/a2199yiAlQB2jQBU/eabZy+dNWvW87quS/vS3d3diVdf3XAHgK0j7ooRURWAWbKKjcfj8bfeequ9tfXd1QDuHCFiASCxe3frv3d1dV3HzOdkhTB27Fh91KhR3y2Vn+sFcIXkjaD29iPnTpw4uQbADwHEMILl9tu/il/9avMhInrE6V3kEgMzY8qUK6+xXMsRJ1dTUDn6+nrPAHilFI7stm3bbdL2yHRstl32+Xx2XqR0EZqU4dONKAC9lBiISFcRhGVBtPTecvhlq2mKF1b6G6yCmYhcMZedcokIEqau7DC79X3GyJ08MwSV+X5pCZPHnM2JLgngciZ2qLCMlJ8LO7RMB25vzXxB+RDrhteJ2Ym35DaXmWEnXezOwrm1LyQb0JEuNt70zs3et3MQuUShTO6Slvl47DffVFZuOoB05drfcftuKU1COj6368mGedDmPrn1LlQaPjz/NxuwuOXezxLwHSK6E8B0AGEGDoH5VQHe/JM73j77/ZZ78NLczSNiuz6N9jZFuT5YxG69exmAD0D0bwxcy4DBwCgAs0H0EwCHFm+9+/aX5m7GPS/eOmJuzafaFVv5jQ34/u/uvheg5VbA7GqKAFwO0t65o+GGv9rcsGP/cAQR5dKhFatyLWkWvm2A8CATg4nJ2qZVmO9D4LLJY34GoKocm2MplOsG20j2jtBAPA45/WWGpX9mwVfDHLUdGGrCyoFf9ZucwywQEcAAmwTmGzykRII9ssmVoQBaxuRmHX9LKhcsfU3MpmmQ9xmLb2Ij7+eqiSG3WRBCTToKJ9c0cvmnXBNqspdFixahsbERAFBfXzeeiPyKwUGsqam5EwCeeGIRXn65MQdmN3wZk3+yitwopCWao/aFJDPcJs6QkivW2NiIxx57fCoRryeiqTBHOVRK/PHHH7sE4Hsvv9zY4pwImI7DVm9qpo5SxJEMIHLYXMFCsdmwQlPX8sifHArJXZ588nszYU6O01DYXDEG8BcAttbX1/1tU1Pz1pqaGnR3d+ds6uY+ueCWyYoxS1wgqdsERSXn60h0XX+hCGIHT2qd500A07u7u0+qdayUIZ6cNlcQmwSThKFlQCgQrBpDZOP3vvsWwDCMv7dEQKk5Vww2U+bMYzgne1j77PP5fF/4wudfaGtr/6diMBMhd25h0Khwdl2SpWxW7k5JAWhum2sYxlDloMkwDPj9/kkA/ABCxWHOlRXjZGVrS1ZNfsbWZzwkpiGbQt3eX7Dgfmzc+BoMwzhuGB4MQWWfrwKHD7d1DY+Jc5oFCBDI1iXc6OMC/UC3ON3+f/fmlwn0tdc22Mf6T13Xf8gMtjOA9vEyTUHqzXJOctR1jQ4cOBAIh8MfZqo2e27B7ZhSymXmFAVnq2YQwUWr1g1Trg5t+fLleOaZZ3/U09Oz3ufzktfrJa/Xi/Tq8Xjg9Xrh85nV+ZnP54XfX0EdHR1db7zxRjuAFcXgTvUisnZoCq5YMkwuyiapPpGzfPlyrFv3cyxc+OB3rrtu5gczZ868z+PxXqZiIKPRSPzw4bbAwYMHDwF4HkBQLfzNdFI0Dbm9BWUhcnE21tmciJzNOrc7tnDhg1i48J+xbt36Hx08eOgVADVQH1GJ+HzeQCQSTcjizgwinO/nCSKkcgUprrBQtrlOO+0klNm8+8nPc9+5devW27vdVlUukUg0L+Z0vESAEMn9VEEUq1xKumqFWdz00V9OsVs2wPLJ6dp+MztaGbsKJWeHxjJ/bG+Fss21R0qT0+4zX+eK03OVf9g0Q+p78zbOUMLsxOl2DU7sEmZBJfwdnjlHKqr97ltzsfZbLfhMxbhbHtpS68+dCxGhn//jjl0vdj6EhomvSOGQzZ9kw2ykh48yzZoZYFFIhCaXcpTld+23WvDQm195TiftaWbEU33PtK2mG/ev//JPGya+UieXmJJOOWYlODVZrmKNFFpuMp8r86yemlnQSLvTHKKClx3JKjsPNZiPIkDE8AjMZ3p3yuVDtCz4Uq8hW8BhFOJbDW9uQXUMjRPJe+RQGjm39kgLR2E+1TOkmPMqV6Q08/zZPLWhm+GxuZm4nSJJ3ZJG6eODQ4rZzT47RiJYPkpgFB3+ZnfSFVUjPSLCQ4I5E6vU0LpQPI16EJGrFdhfcUvA5P5fp+eSI5lvjW4Xi9nGl5oMyueKKd7UoXTEnGQmOz8Vch1OfzZsiiPWsubCJjp3hEYsPXDCBedzydWum8C4QLMw6CBaKVPbZFGKw1eYIMhFTpRBcv4gwlKArHVQz+eyK/DkcbTBcFNNuQLu7iSnB9xKoDMxpw6iyhzKcG1eMutmKDcxSgtUKCvhhZiFfI3OnOPGRWCmPOE9JIMICQyFGIVUx5zTMoXs2uRkfAAZTLbJUDUJmsZIDjbDNbuZ/2keZiXi1OYtkIST7j5re6jsEzMreUTJrF2+iJHymwWR6i+mWO+MBqwoWxWylIMIST+XUMhMS5IhkYncp+K55nM5Sz+Znp4cvqJkFxRCCKXWpqllxSS8BZm4h9XNgnR71DQN4XAoIW8VWPp+qWAOh8Pn/X7/4Ho2+cgdGOiPZ1xLUtsiWWHVLK9NT0FJuX0AvWeNj3H6kztWZU3TEI1G4/v2vX8S5jIqEtk5B0bKXmFdg0xZufIFLFu2PMSMP5gN3hWvXSkYDMX27Xu/G+ayhZnkpgyfp7+X9ppZzfA2NCwNA/yQppH1CH1mIoOIiJl5zZqfHohEIluRZVTWvRlBYjqAPOSnnnraPvhCIjpjRY2uyRciwuuvbz4hhNgEoMeVXKHwxxBKXu4PfvAiGhqWtgUCgdqurq49/f19Qghhx+8cDAbjHR0dvY2NP9556tSpDQB+IZ/hsP4oH2b18LehYenpY8c+ntXVdWn3wMBAzIEZ4XA43tl5ZmDt2p+9t3//gTUAVkt1aO6haJrpUbAKS5Y04Nlnn8GKFc+dA3DbnDlzbujp6Z4Xi8U/F41GqoLB0CeBQGAHzNXxOgpLcnCOkHVwNpZSWbp0KVatWnUewG2zZ8++MRgMfjMajV4Xi0Urg8HQ2UAgsIuZ/7e6uvpET09PriBCZOHMJetUQBJkxYrnBvuKnTt37oTEaIActyINHWcdTFItq1atsnfjra2tuwHsdvueG7EKWTE3h788FkXgPIElp7hiYkSxqU0KcSAulwUnmIWULJ2TDEtALiNvBsTxGZeLcp2pUs5lC7h05Ka0eJEWUqeBLhdisxpWF4Eoeo9DrFzno1KEvBN01YeFhkm5TtycPSwmDSW0uVmmFLi1tpLIIE9fyxj6x2GKLckITYjByo59Yb1m5z6Lkndo86z5YUIIFg58wnEN7LgWth85KAW5TAATEmzZWut10vZSqh0mA5pRQTzp5tGlVu54Ey8P4kvHzWT2EyIhuDTKBRIAzsg2xTFTfJVfWjTpptO7+0qi2C3zj2DephmLYD6wx/nytURA3+lIP0ZwbchBcrfMP5IA8L6sydI9Gmqvr/rlvI3TH0m/8OEkdsv8I/b+UwBekgnAmJk1D6FjW09AObwuvjsYBD8TwH64z0DLAGxlsgBgDxHdt2X+kePpJAwDwTcAeAPmqqbyz0IMJKK/ffijnWB8bcTJtQmZt2nGRgDzFUJy5/daAfwawF4AH26Zf6RzCMicAuBzAGYDuAvmOryAwgrSREQf/veFzvaNF56A+YMaI+yK8eB4/ANE+GsGppK6+mdbNQIgOG/TjCCAYwD2wfyhoU6YS2IHYT77FQVQYdVKMK4E4QqYK0LdCGAazB8yqkTq0+lSawnYxEZ645Gjv764zVI8SmIWAODbr89APMo3gvAH0mh0MUv+q+cJMiaFFPwLJszMpBHFBhLRdxZ/3Bq+GH/Suskl8RbM3FocePP+o3t6P4nMjYcEaASf/nA5VVHERvsS0R3LTh4NX4wvG2lis4K//l8mYP+aAKb9Xc210+8a+zvvKH0SaYSRVHHBpBIRM7j3ZLh3+9ITfwLjBQxR7li1uC4AFNjbj5qrKhDY03++rzO6UTOouqLG+KKnUiMWbI8dlR3Juk+jSHc8cugX5zoOrA28DmAZzIUvShmZZy9VtV4MnI1Cr6Db/vLh2v+afGv1VU5yc6h5OH/5KeW0zMwswMfe7jre9ur5DgDNltdSDmkP+VJzjf+ead+oWVA1wfP1mmkVoz1VOjjBYOFK9LD8ZhlpAOmEaH8ifumjUP/Z9/u7O7b3vBMbEL8HsAWyI8flRq7two2e7B0f6U3cO/Gm0Q9PumXMleOurRwDsqag8iAlRZM7eMPIJFXEmc8fGrjQsa333NkP+ntFjN8WMd4A86dkYuVkpobKbl4L4OYJN466adzMyquqJninevzaeMOv+Qy/TkYFaZpH0zQPkW6Q6aMQOVKY5mhCIsYsYswiJkQ8zIl4WIhYfyIR6oqHek9FOrvag8cvHgmdsHznPQDeQxkXGobjVQKo1D0YVTnBO1XT6SrNoAnMmEgaqkF0GQRXkk5eInjMDCbHAMQ4wSEW6GHBl0ScOxNhDoQvxW0yg46awKeg/D9sz++dIyUyngAAAABJRU5ErkJggg==</uax:ByteString>
+        <uax:ByteString>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</uax:ByteString>
+        <uax:ByteString>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</uax:ByteString>
+      </uax:ListOfExtensionObject>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.Int16" BrowseName="1:Int16" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="Int16" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Int16</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfInt16>
+        <uax:Int16>-5</uax:Int16>
+        <uax:Int16>-4</uax:Int16>
+        <uax:Int16>-3</uax:Int16>
+        <uax:Int16>-2</uax:Int16>
+        <uax:Int16>-1</uax:Int16>
+        <uax:Int16>0</uax:Int16>
+        <uax:Int16>1</uax:Int16>
+        <uax:Int16>2</uax:Int16>
+        <uax:Int16>3</uax:Int16>
+        <uax:Int16>4</uax:Int16>
+      </uax:ListOfInt16>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.Int32" BrowseName="1:Int32" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="Int32" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Int32</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfInt32>
+        <uax:Int32>-5</uax:Int32>
+        <uax:Int32>-4</uax:Int32>
+        <uax:Int32>-3</uax:Int32>
+        <uax:Int32>-2</uax:Int32>
+        <uax:Int32>-1</uax:Int32>
+        <uax:Int32>0</uax:Int32>
+        <uax:Int32>1</uax:Int32>
+        <uax:Int32>2</uax:Int32>
+        <uax:Int32>3</uax:Int32>
+        <uax:Int32>4</uax:Int32>
+      </uax:ListOfInt32>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.Int64" BrowseName="1:Int64" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="Int64" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Int64</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfInt64>
+        <uax:Int64>-5</uax:Int64>
+        <uax:Int64>-4</uax:Int64>
+        <uax:Int64>-3</uax:Int64>
+        <uax:Int64>-2</uax:Int64>
+        <uax:Int64>-1</uax:Int64>
+        <uax:Int64>0</uax:Int64>
+        <uax:Int64>1</uax:Int64>
+        <uax:Int64>2</uax:Int64>
+        <uax:Int64>3</uax:Int64>
+        <uax:Int64>4</uax:Int64>
+      </uax:ListOfInt64>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.Integer" BrowseName="1:Integer" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="Integer">
+    <DisplayName>Integer</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.LocalizedText" BrowseName="1:LocalizedText" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="LocalizedText" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>LocalizedText</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfLocalizedText>
+        <uax:LocalizedText>
+          <uax:Locale>de</uax:Locale>
+          <uax:Text>LocalizedText_00</uax:Text>
+        </uax:LocalizedText>
+        <uax:LocalizedText>
+          <uax:Locale>en</uax:Locale>
+          <uax:Text>LocalizedText_01</uax:Text>
+        </uax:LocalizedText>
+        <uax:LocalizedText>
+          <uax:Locale>de</uax:Locale>
+          <uax:Text>LocalizedText_02</uax:Text>
+        </uax:LocalizedText>
+        <uax:LocalizedText>
+          <uax:Locale>en</uax:Locale>
+          <uax:Text>LocalizedText_03</uax:Text>
+        </uax:LocalizedText>
+        <uax:LocalizedText>
+          <uax:Locale>de</uax:Locale>
+          <uax:Text>LocalizedText_04</uax:Text>
+        </uax:LocalizedText>
+        <uax:LocalizedText>
+          <uax:Locale>en</uax:Locale>
+          <uax:Text>LocalizedText_05</uax:Text>
+        </uax:LocalizedText>
+        <uax:LocalizedText>
+          <uax:Locale>de</uax:Locale>
+          <uax:Text>LocalizedText_06</uax:Text>
+        </uax:LocalizedText>
+        <uax:LocalizedText>
+          <uax:Locale>en</uax:Locale>
+          <uax:Text>LocalizedText_07</uax:Text>
+        </uax:LocalizedText>
+        <uax:LocalizedText>
+          <uax:Locale>de</uax:Locale>
+          <uax:Text>LocalizedText_08</uax:Text>
+        </uax:LocalizedText>
+        <uax:LocalizedText>
+          <uax:Locale>en</uax:Locale>
+          <uax:Text>LocalizedText_09</uax:Text>
+        </uax:LocalizedText>
+      </uax:ListOfLocalizedText>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.NodeId" BrowseName="1:NodeId" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="8" DataType="NodeId" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>NodeId</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfNodeId>
+        <uax:NodeId>
+          <uax:Identifier>i=0</uax:Identifier>
+        </uax:NodeId>
+        <uax:NodeId>
+          <uax:Identifier>ns=2;s=NodeId_01</uax:Identifier>
+        </uax:NodeId>
+        <uax:NodeId>
+          <uax:Identifier>ns=1;g=82c17c2c-7732-453e-a4b6-22e57b783aa9</uax:Identifier>
+        </uax:NodeId>
+        <uax:NodeId>
+          <uax:Identifier>ns=2;i=4</uax:Identifier>
+        </uax:NodeId>
+        <uax:NodeId>
+          <uax:Identifier>s=NodeId_05</uax:Identifier>
+        </uax:NodeId>
+        <uax:NodeId>
+          <uax:Identifier>ns=1;g=7617e79e-7d93-41bf-8439-3ab1b7788b52</uax:Identifier>
+        </uax:NodeId>
+        <uax:NodeId>
+          <uax:Identifier>ns=2;i=8</uax:Identifier>
+        </uax:NodeId>
+        <uax:NodeId>
+          <uax:Identifier>ns=2;s=NodeId_09</uax:Identifier>
+        </uax:NodeId>
+      </uax:ListOfNodeId>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.NumericRange" BrowseName="1:NumericRange" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="NumericRange" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>NumericRange</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfExtensionObject>
+        <uax:String>0:10,0:1</uax:String>
+        <uax:String>1:9,0:1</uax:String>
+        <uax:String>2:8,0:1</uax:String>
+        <uax:String>3:7,0:1</uax:String>
+        <uax:String>4:6,0:1</uax:String>
+        <uax:String>5:5,0:1</uax:String>
+        <uax:String>6:4,0:1</uax:String>
+        <uax:String>7:3,0:1</uax:String>
+        <uax:String>8:2,0:1</uax:String>
+        <uax:String>9:1,0:1</uax:String>
+      </uax:ListOfExtensionObject>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.QualifiedName" BrowseName="1:QualifiedName" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="QualifiedName" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>QualifiedName</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfQualifiedName>
+        <uax:QualifiedName>
+          <uax:Name>QualifiedName_00</uax:Name>
+        </uax:QualifiedName>
+        <uax:QualifiedName>
+          <uax:Name>QualifiedName_01</uax:Name>
+          <uax:NamespaceIndex>1</uax:NamespaceIndex>
+        </uax:QualifiedName>
+        <uax:QualifiedName>
+          <uax:Name>QualifiedName_02</uax:Name>
+          <uax:NamespaceIndex>2</uax:NamespaceIndex>
+        </uax:QualifiedName>
+        <uax:QualifiedName>
+          <uax:Name>QualifiedName_03</uax:Name>
+          <uax:NamespaceIndex>3</uax:NamespaceIndex>
+        </uax:QualifiedName>
+        <uax:QualifiedName>
+          <uax:Name>QualifiedName_04</uax:Name>
+          <uax:NamespaceIndex>4</uax:NamespaceIndex>
+        </uax:QualifiedName>
+        <uax:QualifiedName>
+          <uax:Name>QualifiedName_05</uax:Name>
+        </uax:QualifiedName>
+        <uax:QualifiedName>
+          <uax:Name>QualifiedName_06</uax:Name>
+          <uax:NamespaceIndex>1</uax:NamespaceIndex>
+        </uax:QualifiedName>
+        <uax:QualifiedName>
+          <uax:Name>QualifiedName_07</uax:Name>
+          <uax:NamespaceIndex>2</uax:NamespaceIndex>
+        </uax:QualifiedName>
+        <uax:QualifiedName>
+          <uax:Name>QualifiedName_08</uax:Name>
+          <uax:NamespaceIndex>3</uax:NamespaceIndex>
+        </uax:QualifiedName>
+        <uax:QualifiedName>
+          <uax:Name>QualifiedName_09</uax:Name>
+          <uax:NamespaceIndex>4</uax:NamespaceIndex>
+        </uax:QualifiedName>
+      </uax:ListOfQualifiedName>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.SByte" BrowseName="1:SByte" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="SByte" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>SByte</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfSByte>
+        <uax:SByte>-5</uax:SByte>
+        <uax:SByte>-4</uax:SByte>
+        <uax:SByte>-3</uax:SByte>
+        <uax:SByte>-2</uax:SByte>
+        <uax:SByte>-1</uax:SByte>
+        <uax:SByte>0</uax:SByte>
+        <uax:SByte>1</uax:SByte>
+        <uax:SByte>2</uax:SByte>
+        <uax:SByte>3</uax:SByte>
+        <uax:SByte>4</uax:SByte>
+      </uax:ListOfSByte>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.ServerState" BrowseName="1:ServerState" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="ServerState" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>ServerState</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfExtensionObject>
+        <uax:Int32>0</uax:Int32>
+        <uax:Int32>1</uax:Int32>
+        <uax:Int32>2</uax:Int32>
+        <uax:Int32>3</uax:Int32>
+        <uax:Int32>4</uax:Int32>
+        <uax:Int32>5</uax:Int32>
+        <uax:Int32>6</uax:Int32>
+        <uax:Int32>7</uax:Int32>
+        <uax:Int32>0</uax:Int32>
+        <uax:Int32>1</uax:Int32>
+      </uax:ListOfExtensionObject>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.StatusCode" BrowseName="1:StatusCode" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="StatusCode" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>StatusCode</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfStatusCode>
+        <uax:StatusCode>
+          <uax:Code>0</uax:Code>
+        </uax:StatusCode>
+        <uax:StatusCode>
+          <uax:Code>2150694912</uax:Code>
+        </uax:StatusCode>
+        <uax:StatusCode>
+          <uax:Code>2150825984</uax:Code>
+        </uax:StatusCode>
+        <uax:StatusCode>
+          <uax:Code>2151022592</uax:Code>
+        </uax:StatusCode>
+        <uax:StatusCode>
+          <uax:Code>2151284736</uax:Code>
+        </uax:StatusCode>
+        <uax:StatusCode>
+          <uax:Code>2151677952</uax:Code>
+        </uax:StatusCode>
+        <uax:StatusCode>
+          <uax:Code>0</uax:Code>
+        </uax:StatusCode>
+        <uax:StatusCode>
+          <uax:Code>2150694912</uax:Code>
+        </uax:StatusCode>
+        <uax:StatusCode>
+          <uax:Code>2150825984</uax:Code>
+        </uax:StatusCode>
+        <uax:StatusCode>
+          <uax:Code>2151022592</uax:Code>
+        </uax:StatusCode>
+      </uax:ListOfStatusCode>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.String" BrowseName="1:String" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="String" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>String</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfString>
+        <uax:String>Hello_0</uax:String>
+        <uax:String>Hello_1</uax:String>
+        <uax:String>Hello_2</uax:String>
+        <uax:String>Hello_3</uax:String>
+        <uax:String>Hello_4</uax:String>
+        <uax:String>Hello_5</uax:String>
+        <uax:String>Hello_6</uax:String>
+        <uax:String>Hello_7</uax:String>
+        <uax:String>Hello_8</uax:String>
+        <uax:String>Hello_9</uax:String>
+      </uax:ListOfString>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.Structure" BrowseName="1:Structure" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="Structure" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Structure</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <!--<Value> nodeset_loader - not implemented (16.11.2023) -->
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.UInt16" BrowseName="1:UInt16" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="UInt16" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>UInt16</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfUInt16>
+        <uax:UInt16>0</uax:UInt16>
+        <uax:UInt16>1</uax:UInt16>
+        <uax:UInt16>2</uax:UInt16>
+        <uax:UInt16>3</uax:UInt16>
+        <uax:UInt16>4</uax:UInt16>
+        <uax:UInt16>5</uax:UInt16>
+        <uax:UInt16>6</uax:UInt16>
+        <uax:UInt16>7</uax:UInt16>
+        <uax:UInt16>8</uax:UInt16>
+        <uax:UInt16>9</uax:UInt16>
+      </uax:ListOfUInt16>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.UInt32" BrowseName="1:UInt32" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="UInt32" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>UInt32</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfUInt32>
+        <uax:UInt32>0</uax:UInt32>
+        <uax:UInt32>1</uax:UInt32>
+        <uax:UInt32>2</uax:UInt32>
+        <uax:UInt32>3</uax:UInt32>
+        <uax:UInt32>4</uax:UInt32>
+        <uax:UInt32>5</uax:UInt32>
+        <uax:UInt32>6</uax:UInt32>
+        <uax:UInt32>7</uax:UInt32>
+        <uax:UInt32>8</uax:UInt32>
+        <uax:UInt32>9</uax:UInt32>
+      </uax:ListOfUInt32>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.UInt64" BrowseName="1:UInt64" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="UInt64" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>UInt64</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfUInt64>
+        <uax:UInt64>0</uax:UInt64>
+        <uax:UInt64>1</uax:UInt64>
+        <uax:UInt64>2</uax:UInt64>
+        <uax:UInt64>3</uax:UInt64>
+        <uax:UInt64>4</uax:UInt64>
+        <uax:UInt64>5</uax:UInt64>
+        <uax:UInt64>6</uax:UInt64>
+        <uax:UInt64>7</uax:UInt64>
+        <uax:UInt64>8</uax:UInt64>
+        <uax:UInt64>9</uax:UInt64>
+      </uax:ListOfUInt64>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.UtcTime" BrowseName="1:UtcTime" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="UtcTime" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>UtcTime</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <Value>
+      <uax:ListOfExtensionObject>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+        <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+      </uax:ListOfExtensionObject>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.Vector" BrowseName="1:Vector" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="10" DataType="i=18807" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Vector</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Arrays.XmlElement" BrowseName="1:XmlElement" ParentNodeId="ns=1;s=Demo.Static.Arrays" ValueRank="1" ArrayDimensions="1" DataType="XmlElement" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>XmlElement</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Arrays</Reference>
+    </References>
+    <!--<Value> nodeset_loader - not implemented (16.11.2023) -->
+  </UAVariable>
+  <UAObject NodeId="ns=1;s=Demo.Static.Scalar" BrowseName="1:Scalar" ParentNodeId="ns=1;s=Demo.Static">
+    <DisplayName>Scalar</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.BaseDataType</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Boolean</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Byte</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.ByteString</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.DateTime</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Double</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Duration</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.ExpandedNodeId</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Float</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Guid</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.ImagePNG</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Int16</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Int32</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Int64</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Integer</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.LocalizedText</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.NodeId</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Number</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.NumericRange</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.QualifiedName</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.SByte</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.ServerState</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.StatusCode</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.String</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Structures</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.UInt16</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.UInt32</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.UInt64</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.UInteger</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.UtcTime</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.XmlElement</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.BaseDataType" BrowseName="1:BaseDataType" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="BaseDataType">
+    <DisplayName>BaseDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+               <!--<Value> nodeset_loader - Matrix not implemented (16.11.2023) -->
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.Boolean" BrowseName="1:Boolean" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="Boolean" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Boolean</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:Boolean>false</uax:Boolean>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.Byte" BrowseName="1:Byte" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="Byte" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Byte</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:Byte>254</uax:Byte>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.ByteString" BrowseName="1:ByteString" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="ByteString" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>ByteString</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:ByteString>ABAgMEBQYHCAkA==</uax:ByteString>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.DateTime" BrowseName="1:DateTime" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="DateTime" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>DateTime</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.Double" BrowseName="1:Double" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="Double" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Double</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:Double>2.4</uax:Double>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.Duration" BrowseName="1:Duration" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="Duration" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Duration</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:Double>1.2</uax:Double>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.ExpandedNodeId" BrowseName="1:ExpandedNodeId" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="ExpandedNodeId" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>ExpandedNodeId</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+              <!--<Value> nodeset_loader - Matrix not implemented (16.11.2023) -->
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.Float" BrowseName="1:Float" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="Float" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Float</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:Float>22.331</uax:Float>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.Guid" BrowseName="1:Guid" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="Guid" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Guid</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:Guid>
+        <uax:String>d23f9836-6dda-447c-a6a3-adc6be275513</uax:String>
+      </uax:Guid>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.ImagePNG" BrowseName="1:ImagePNG" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="ImagePNG" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>ImagePNG</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:ByteString>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</uax:ByteString>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.Int16" BrowseName="1:Int16" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="Int16" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Int16</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:Int16>442</uax:Int16>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.Int32" BrowseName="1:Int32" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="Int32" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Int32</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:Int32>53333443</uax:Int32>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.Int64" BrowseName="1:Int64" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="Int64" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Int64</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:Int64>5444897989394875</uax:Int64>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.Integer" BrowseName="1:Integer" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="Integer">
+    <DisplayName>Integer</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:ExtensionObject>
+        <uax:TypeId>
+          <uax:Identifier>i=27</uax:Identifier>
+        </uax:TypeId>
+        <uax:Body>
+          <uax:Integer />
+        </uax:Body>
+      </uax:ExtensionObject>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.LocalizedText" BrowseName="1:LocalizedText" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="LocalizedText" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>LocalizedText</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:LocalizedText>
+        <uax:Locale>en</uax:Locale>
+        <uax:Text>LocalizedText</uax:Text>
+      </uax:LocalizedText>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.NodeId" BrowseName="1:NodeId" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="NodeId" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>NodeId</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:NodeId>
+        <uax:Identifier>ns=1;s=MyStringNodeId</uax:Identifier>
+      </uax:NodeId>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.Number" BrowseName="1:Number" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="Number">
+    <DisplayName>Number</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:ExtensionObject>
+        <uax:TypeId>
+          <uax:Identifier>i=26</uax:Identifier>
+        </uax:TypeId>
+        <uax:Body>
+          <uax:Number />
+        </uax:Body>
+      </uax:ExtensionObject>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.NumericRange" BrowseName="1:NumericRange" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="NumericRange" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>NumericRange</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:String>1:2,0:1</uax:String>
+    </Value>
+  </UAVariable>
+
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.QualifiedName" BrowseName="1:QualifiedName" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="QualifiedName" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>QualifiedName</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:QualifiedName>
+        <uax:Name>QualifiedName</uax:Name>
+        <uax:NamespaceIndex>2</uax:NamespaceIndex>
+      </uax:QualifiedName>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.SByte" BrowseName="1:SByte" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="SByte" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>SByte</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:SByte>0</uax:SByte>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.ServerState" BrowseName="1:ServerState" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="ServerState" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>ServerState</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:Int32>0</uax:Int32>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.StatusCode" BrowseName="1:StatusCode" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="StatusCode" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>StatusCode</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:StatusCode>
+        <uax:Code>0</uax:Code>
+      </uax:StatusCode>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.String" BrowseName="1:String" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="String" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>String</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:String>Hello world</uax:String>
+    </Value>
+  </UAVariable>
+  <UAObject NodeId="ns=1;s=Demo.Static.Scalar.Structures" BrowseName="1:Structures" ParentNodeId="ns=1;s=Demo.Static.Scalar">
+    <DisplayName>Structures</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="Organizes">ns=1;s=Demo.Static.Scalar.Structure</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.Structure" BrowseName="1:Structure" ParentNodeId="ns=1;s=Demo.Static.Scalar.Structures" DataType="Structure" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Structure</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar.Structures</Reference>
+    </References>
+              <!--<Value> nodeset_loader - Matrix not implemented (16.11.2023) -->
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.UInt16" BrowseName="1:UInt16" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="UInt16" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>UInt16</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:UInt16>0</uax:UInt16>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.UInt32" BrowseName="1:UInt32" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="UInt32" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>UInt32</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:UInt32>0</uax:UInt32>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.UInt64" BrowseName="1:UInt64" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="UInt64" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>UInt64</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:UInt64>0</uax:UInt64>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.UInteger" BrowseName="1:UInteger" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="UInteger">
+    <DisplayName>UInteger</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:ExtensionObject>
+        <uax:TypeId>
+          <uax:Identifier>i=28</uax:Identifier>
+        </uax:TypeId>
+        <uax:Body>
+          <uax:UInteger />
+        </uax:Body>
+      </uax:ExtensionObject>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.UtcTime" BrowseName="1:UtcTime" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="UtcTime" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>UtcTime</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+    <Value>
+      <uax:DateTime>2023-10-24T09:12:14</uax:DateTime>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=Demo.Static.Scalar.XmlElement" BrowseName="1:XmlElement" ParentNodeId="ns=1;s=Demo.Static.Scalar" DataType="XmlElement" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>XmlElement</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static.Scalar</Reference>
+    </References>
+           <!--<Value> nodeset_loader - Matrix not implemented (16.11.2023) -->
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=4294967294" BrowseName="1:VariableWithNumericNodeId" ParentNodeId="ns=1;s=Demo.Static" DataType="UInt32" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>VariableWithNumericNodeId</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;s=Demo.Static</Reference>
+    </References>
+    <Value>
+      <uax:UInt32>44</uax:UInt32>
+    </Value>
+  </UAVariable>
+</UANodeSet>
