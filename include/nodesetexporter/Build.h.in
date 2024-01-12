@@ -1,0 +1,171 @@
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright 2024 (c) Aleksander Rozhkov <aleksprog@hotmail.com>
+//
+
+#ifndef NODESETEXPORTER_BUILD_H
+#define NODESETEXPORTER_BUILD_H
+
+#cmakedefine PROJECT_VERSION_SUFFIX
+
+#include <fmt/format.h>
+
+#include <ostream>
+#include <string_view>
+
+
+namespace build
+{
+
+
+struct Compiler
+{
+    std::string_view name;
+    std::string_view version;
+
+    int major;
+    int minor;
+    int patch;
+};
+
+/**
+ * @brief Information about the compiler.
+ */
+constexpr Compiler compiler
+{
+    // clang-format off
+#if defined(__clang__)
+    "Clang",
+    __clang_version__,
+
+    __clang_major__,
+    __clang_minor__,
+    __clang_patchlevel__,
+#elif defined(__GNUC__)
+    "gcc",
+    __VERSION__,
+
+    __GNUC__,
+    __GNUC_MINOR__,
+    __GNUC_PATCHLEVEL__,
+#else
+#error Unsupported compiler.
+#endif
+    // clang-format on
+};
+
+
+struct Version
+{
+    int major;
+    int minor;
+    int patch;
+    std::string_view suffix;
+};
+
+
+/**
+ * @brief Project version.
+ */
+constexpr Version version
+{
+    // clang-format off
+    @PROJECT_VERSION_MAJOR@,
+    @PROJECT_VERSION_MINOR@,
+    @PROJECT_VERSION_PATCH@,
+    "@PROJECT_VERSION_SUFFIX@",
+    // clang-format on
+};
+
+
+/**
+ * @brief Revision of the project in the git version control system.
+ */
+constexpr std::string_view git_revision = "@IDSMART_GIT_REVISION@"; // NOLINT(readability-redundant-string-init)
+/**
+ * @brief The project's branch in the git version control system.
+ */
+constexpr std::string_view git_branch = "@IDSMART_GIT_BRANCH@"; // NOLINT(readability-redundant-string-init)
+
+/**
+ * @brief Build mode
+ */
+constexpr std::string_view build_type = "@CMAKE_BUILD_TYPE@"; // NOLINT(readability-redundant-string-init)
+
+} // namespace build
+
+
+namespace fmt
+{
+
+template <>
+struct formatter<build::Compiler> // NOLINT(readability-identifier-naming)
+{
+    constexpr auto parse(format_parse_context& ctx) // NOLINT(readability-identifier-naming)
+    {
+        auto const* iterator = ctx.begin();
+        auto const* end = ctx.end();
+        if (iterator != end && *iterator != '}')
+        {
+            throw format_error("invalid format");
+        }
+        return iterator;
+    }
+
+    template <typename FormatContext>
+    auto format(build::Compiler const& compiler, FormatContext& ctx) // NOLINT(readability-identifier-naming)
+    {
+        return format_to(ctx.out(), "{} {}", compiler.name, compiler.version);
+    }
+};
+
+template <>
+struct formatter<build::Version> // NOLINT(readability-identifier-naming)
+{
+    constexpr auto parse(format_parse_context& ctx) // NOLINT(readability-identifier-naming)
+    {
+        auto const* iterator = ctx.begin();
+        auto const* end = ctx.end();
+        if (iterator != end && *iterator != '}')
+        {
+            throw format_error("invalid format");
+        }
+        return iterator;
+    }
+
+    template <typename FormatContext>
+    auto format(build::Version const& version, FormatContext& ctx) // NOLINT(readability-identifier-naming)
+    {
+#ifdef PROJECT_VERSION_SUFFIX
+        return format_to(ctx.out(), "{}.{}.{}-{}", version.major, version.minor, version.patch, version.suffix);
+#else
+        return format_to(ctx.out(), "{}.{}.{}", version.major, version.minor, version.patch);
+#endif
+    }
+};
+
+} // namespace fmt
+
+
+namespace build
+{
+
+inline std::ostream& operator<<(std::ostream& os_stream, Compiler const& compiler)
+{
+    fmt::format_to(std::ostream_iterator<std::ostream::char_type>(os_stream), "{}", compiler);
+    return os_stream;
+}
+
+inline std::ostream& operator<<(std::ostream& os_stream, Version const& version)
+{
+    fmt::format_to(std::ostream_iterator<std::ostream::char_type>(os_stream), "{}", version);
+    return os_stream;
+}
+
+} // namespace build
+
+
+#endif // NODESETEXPORTER_BUILD_H

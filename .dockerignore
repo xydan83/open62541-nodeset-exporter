@@ -56,7 +56,7 @@ venv
 
 # CMake (CLion)
 cmake-build*/
-# В текущий момент нет возможности указать wildcard для пути исключения: https://github.com/moby/moby/issues/30018
+# At the moment, it is not possible to specify a wildcard for the exclusion path: https://github.com/moby/moby/issues/30018
 !cmake-build/bin/ua
 !cmake-build/UAServerTest
 !cmake-build/*.deb

@@ -51,5 +51,5 @@ CheckOptions:
   # Unions.
   - { key: readability-identifier-naming.UnionCase,             value: CamelCase  }
 WarningsAsErrors: '*'
-HeaderFilterRegex: '(src/idsmart|include/idsmart)/.*\.(h|hpp|hxx|c|cpp|cxx)$'
+HeaderFilterRegex: '(src/nodesetexporter|include/nodesetexporter)/.*\.(h|hpp|hxx|c|cpp|cxx)$'
 FormatStyle: file

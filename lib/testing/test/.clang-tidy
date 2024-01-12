@@ -1,0 +1,5 @@
+InheritParentConfig: true
+Checks: >-
+  -google-build-using-namespace,
+  -readability-identifier-naming,
+  -readability-magic-numbers
