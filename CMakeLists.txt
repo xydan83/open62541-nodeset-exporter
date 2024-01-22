@@ -13,7 +13,7 @@ project(nodesetexporter
         HOMEPAGE_URL "https://github.com/xydan83/open62541-nodeset-exporter"
         LANGUAGES C CXX)
 
-set(PROJECT_VERSION_SUFFIX "rc1")
+set(PROJECT_VERSION_SUFFIX "")
 
 include(GNUInstallDirs)
 
