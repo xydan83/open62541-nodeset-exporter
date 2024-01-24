@@ -143,7 +143,13 @@ static void CheckXMLNode( // NOLINT(misc-no-recursion)
  */
 static xmlpp::Attribute::NodeSet GetFindXMLNode(const std::string& xpath, xmlpp::DomParser& parser, xmlpp::XsdValidator& validator, const std::stringstream& buf)
 {
-    const std::string out_xml(buf.str());
+    std::string out_xml(buf.str());
+    // At some point the error "Line 44, column 1 (fatal): Extra content at the end of the document" appeared.
+    // Swears at the presence of a line feed at the end.
+    // The libxml2 library may have been updated in libxmlpp. I haven't found another solution yet.
+    // Since it is used only for testing - due to its non-criticality - I will introduce a temporary solution.
+    // Similar solutions will exist wherever a buffer is used. There are no such problems when checking files.
+    out_xml.erase(out_xml.rfind('\n'));
     parser.parse_memory(out_xml);
     validator.validate(parser.get_document()); // Schematic Validation
     auto* pNode = parser.get_document()->get_root_node();

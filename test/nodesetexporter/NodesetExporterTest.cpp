@@ -1049,6 +1049,12 @@ TEST_SUITE("nodesetexporter")
                 {
                     CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                     std::string out_xml(out_test_buffer.str());
+                    // At some point the error "Line 44, column 1 (fatal): Extra content at the end of the document" appeared.
+                    // Swears at the presence of a line feed at the end.
+                    // The libxml2 library may have been updated in libxmlpp. I haven't found another solution yet.
+                    // Since it is used only for testing - due to its non-criticality - I will introduce a temporary solution.
+                    // Similar solutions will exist wherever a buffer is used. There are no such problems when checking files.
+                    out_xml.erase(out_xml.rfind('\n'));
                     MESSAGE(out_xml);
                     CHECK_NOTHROW(parser.parse_memory(out_xml));
                     CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
@@ -1061,6 +1067,7 @@ TEST_SUITE("nodesetexporter")
                     opt.number_of_max_nodes_to_request_data = number_of_max_nodes_to_request_data;
                     CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                     std::string out_xml(out_test_buffer.str());
+                    out_xml.erase(out_xml.rfind('\n'));
                     MESSAGE(out_xml);
                     CHECK_NOTHROW(parser.parse_memory(out_xml));
                     CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
@@ -1200,6 +1207,7 @@ TEST_SUITE("nodesetexporter")
                 {
                     CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                     std::string out_xml(out_test_buffer.str());
+                    out_xml.erase(out_xml.rfind('\n'));
                     MESSAGE(out_xml);
                     CHECK_NOTHROW(parser.parse_memory(out_xml));
                     CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
@@ -1212,6 +1220,7 @@ TEST_SUITE("nodesetexporter")
                     opt.number_of_max_nodes_to_request_data = number_of_max_nodes_to_request_data;
                     CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                     std::string out_xml(out_test_buffer.str());
+                    out_xml.erase(out_xml.rfind('\n'));
                     MESSAGE(out_xml);
                     CHECK_NOTHROW(parser.parse_memory(out_xml));
                     CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
@@ -1285,6 +1294,7 @@ TEST_SUITE("nodesetexporter")
                 {
                     CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                     std::string out_xml(out_test_buffer.str());
+                    out_xml.erase(out_xml.rfind('\n'));
                     MESSAGE(out_xml);
                     CHECK_NOTHROW(parser.parse_memory(out_xml));
                     CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
@@ -1331,6 +1341,7 @@ TEST_SUITE("nodesetexporter")
                     opt.number_of_max_nodes_to_request_data = 2;
                     CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                     std::string out_xml(out_test_buffer.str());
+                    out_xml.erase(out_xml.rfind('\n'));
                     MESSAGE(out_xml);
                     CHECK_NOTHROW(parser.parse_memory(out_xml));
                     CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
@@ -1377,6 +1388,7 @@ TEST_SUITE("nodesetexporter")
                     opt.parent_start_node_replacer = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID_NUMERIC(2, 3), UA_TYPES_EXPANDEDNODEID);
                     CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                     std::string out_xml(out_test_buffer.str());
+                    out_xml.erase(out_xml.rfind('\n'));
                     MESSAGE(out_xml);
                     CHECK_NOTHROW(parser.parse_memory(out_xml));
                     CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
@@ -1424,6 +1436,7 @@ TEST_SUITE("nodesetexporter")
                     opt.number_of_max_nodes_to_request_data = 2;
                     CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                     std::string out_xml(out_test_buffer.str());
+                    out_xml.erase(out_xml.rfind('\n'));
                     MESSAGE(out_xml);
                     CHECK_NOTHROW(parser.parse_memory(out_xml));
                     CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document

@@ -86,6 +86,12 @@ TEST_SUITE("nodesetexporter::encoders")
             tinyxml2::XMLPrinter printer_valid;
             doc_valid_test.Print(&printer_valid);
             std::string valid_test_str(printer_valid.CStr(), printer_valid.CStrSize());
+            // At some point the error "Line 44, column 1 (fatal): Extra content at the end of the document" appeared.
+            // Swears at the presence of a line feed at the end.
+            // The libxml2 library may have been updated in libxmlpp. I haven't found another solution yet.
+            // Since it is used only for testing - due to its non-criticality - I will introduce a temporary solution.
+            // Similar solutions will exist wherever a buffer is used. There are no such problems when checking files.
+            valid_test_str.erase(valid_test_str.rfind('\n'));
             MESSAGE(valid_test_str);
 
             xmlpp::DomParser parser_valid;
@@ -435,9 +441,11 @@ TEST_SUITE("nodesetexporter::encoders")
                 CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
                 CHECK_EQ(xmlEncoder.AddNamespaces(namespaces), StatusResults::Good); // MAIN TEST METHOD
                 CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
-                MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
+                std::string out_xml(out_test_buffer.str());
+                out_xml.erase(out_xml.rfind('\n'));
+                MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
 
-                CHECK_NOTHROW(parser.parse_memory(out_test_buffer.str()));
+                CHECK_NOTHROW(parser.parse_memory(out_xml));
                 CHECK_NOTHROW(valid.validate(parser.get_document())); // Schematic Validation
 
                 xpath = "//xmlns:NamespaceUris"; // Node to be checked
@@ -491,9 +499,11 @@ TEST_SUITE("nodesetexporter::encoders")
                 CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
                 CHECK_EQ(xmlEncoder.AddAliases(aliases), StatusResults::Good); // MAIN TEST METHOD
                 CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
-                MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
+                std::string out_xml(out_test_buffer.str());
+                out_xml.erase(out_xml.rfind('\n'));
+                MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
 
-                CHECK_NOTHROW(parser.parse_memory(out_test_buffer.str()));
+                CHECK_NOTHROW(parser.parse_memory(out_xml));
                 CHECK_NOTHROW(valid.validate(parser.get_document())); // Schematic Validation
 
                 xpath = "//xmlns:Aliases"; // Node to be checked
@@ -555,9 +565,11 @@ TEST_SUITE("nodesetexporter::encoders")
             CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
             CHECK_EQ(xmlEncoder.AddNodeObject(nim_object), StatusResults::Good); // MAIN TEST METHOD
             CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
-            MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
+            std::string out_xml(out_test_buffer.str());
+            out_xml.erase(out_xml.rfind('\n'));
+            MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
 
-            CHECK_NOTHROW(parser.parse_memory(out_test_buffer.str()));
+            CHECK_NOTHROW(parser.parse_memory(out_xml));
             CHECK_NOTHROW(valid.validate(parser.get_document())); // Schematic Validation
 
             xpath = "//xmlns:UAObject"; // Node to be checked
@@ -640,9 +652,11 @@ TEST_SUITE("nodesetexporter::encoders")
             CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
             CHECK_EQ(xmlEncoder.AddNodeObjectType(nim_object_type), StatusResults::Good); // MAIN TEST METHOD
             CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
-            MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
+            std::string out_xml(out_test_buffer.str());
+            out_xml.erase(out_xml.rfind('\n'));
+            MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
 
-            CHECK_NOTHROW(parser.parse_memory(out_test_buffer.str()));
+            CHECK_NOTHROW(parser.parse_memory(out_xml));
             CHECK_NOTHROW(valid.validate(parser.get_document())); // Schematic Validation
 
             xpath = "//xmlns:UAObjectType"; // Node to be checked
@@ -718,9 +732,11 @@ TEST_SUITE("nodesetexporter::encoders")
                 CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
                 CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_scalar), StatusResults::Good); // MAIN TEST METHOD
                 CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
-                MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
+                std::string out_xml(out_test_buffer.str());
+                out_xml.erase(out_xml.rfind('\n'));
+                MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
 
-                CHECK_NOTHROW(parser.parse_memory(out_test_buffer.str()));
+                CHECK_NOTHROW(parser.parse_memory(out_xml));
                 CHECK_NOTHROW(valid.validate(parser.get_document())); // Schematic Validation
 
                 xpath = "//xmlns:UAVariable"; // Node to be checked
@@ -803,9 +819,11 @@ TEST_SUITE("nodesetexporter::encoders")
                 CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
                 CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_array), StatusResults::Good); // MAIN TEST METHOD
                 CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
-                MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
+                std::string out_xml(out_test_buffer.str());
+                out_xml.erase(out_xml.rfind('\n'));
+                MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
 
-                CHECK_NOTHROW(parser.parse_memory(out_test_buffer.str()));
+                CHECK_NOTHROW(parser.parse_memory(out_xml));
                 CHECK_NOTHROW(valid.validate(parser.get_document())); // Schematic Validation
 
                 xpath = "//xmlns:UAVariable"; // Node to be checked
@@ -875,9 +893,11 @@ TEST_SUITE("nodesetexporter::encoders")
             CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
             CHECK_EQ(xmlEncoder.AddNodeVariableType(nim_variable_type), StatusResults::Good); // MAIN TEST METHOD
             CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
-            MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
+            std::string out_xml(out_test_buffer.str());
+            out_xml.erase(out_xml.rfind('\n'));
+            MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
 
-            CHECK_NOTHROW(parser.parse_memory(out_test_buffer.str()));
+            CHECK_NOTHROW(parser.parse_memory(out_xml));
             CHECK_NOTHROW(valid.validate(parser.get_document())); // Schematic Validation
 
             xpath = "//xmlns:UAVariableType"; // Node to be checked
@@ -959,9 +979,11 @@ TEST_SUITE("nodesetexporter::encoders")
             CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
             CHECK_EQ(xmlEncoder.AddNodeReferenceType(nim_reference_type), StatusResults::Good); // MAIN TEST METHOD
             CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
-            MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
+            std::string out_xml(out_test_buffer.str());
+            out_xml.erase(out_xml.rfind('\n'));
+            MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
 
-            CHECK_NOTHROW(parser.parse_memory(out_test_buffer.str()));
+            CHECK_NOTHROW(parser.parse_memory(out_xml));
             CHECK_NOTHROW(valid.validate(parser.get_document())); // Schematic Validation
 
             xpath = "//xmlns:UAReferenceType"; // Node to be checked
@@ -1051,9 +1073,11 @@ TEST_SUITE("nodesetexporter::encoders")
             CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
             CHECK_EQ(xmlEncoder.AddNodeDataType(nim_data_type), StatusResults::Good); // MAIN TEST METHOD
             CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
-            MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
+            std::string out_xml(out_test_buffer.str());
+            out_xml.erase(out_xml.rfind('\n'));
+            MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
 
-            CHECK_NOTHROW(parser.parse_memory(out_test_buffer.str()));
+            CHECK_NOTHROW(parser.parse_memory(out_xml));
             CHECK_NOTHROW(valid.validate(parser.get_document())); // Schematic Validation
 
             xpath = "//xmlns:UADataType"; // Node to be checked
@@ -1133,9 +1157,11 @@ TEST_SUITE("nodesetexporter::encoders")
                 CHECK_EQ(xmlEncoder.AddNodeReferenceType(nim_reference_type), StatusResults::Good);
                 CHECK_EQ(xmlEncoder.AddNodeDataType(nim_data_type), StatusResults::Good);
                 CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
-                MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
+                std::string out_xml(out_test_buffer.str());
+                out_xml.erase(out_xml.rfind('\n'));
+                MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
 
-                CHECK_NOTHROW(parser.parse_memory(out_test_buffer.str()));
+                CHECK_NOTHROW(parser.parse_memory(out_xml));
                 CHECK_NOTHROW(valid.validate(parser.get_document())); // Schematic Validation
 
                 xpath = "//xmlns:UANodeSet"; // Node to be checked
@@ -1311,9 +1337,11 @@ TEST_SUITE("nodesetexporter::encoders")
                 CHECK_EQ(xmlEncoder.AddNodeVariableType(nim_variable_type), StatusResults::Good);
                 CHECK_EQ(xmlEncoder.AddNamespaces(namespaces), StatusResults::Good);
                 CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
-                MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
+                std::string out_xml(out_test_buffer.str());
+                out_xml.erase(out_xml.rfind('\n'));
+                MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
 
-                CHECK_NOTHROW(parser.parse_memory(out_test_buffer.str()));
+                CHECK_NOTHROW(parser.parse_memory(out_xml));
                 CHECK_NOTHROW(valid.validate(parser.get_document())); // Schematic Validation
 
                 xpath = "//xmlns:UANodeSet"; // Node to be checked
