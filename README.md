@@ -136,6 +136,31 @@ The utility project is located here: https://github.com/xydan83/open62541-nodese
 
 The assembly of the utility as part of the library can be enabled using the option NODESETEXPORTER_CLI_ENABLE.
 
+### Parameters
+
+```
+Usage: ./cli_nodesetexporter [options]
+Options:
+  -h [ --help ]                         Show hints
+  -v [ --version ]                      Show version
+  -e [ --endpoint ] arg (=opc.tcp://localhost:4840)
+                                        Endpoint to OPC UA Server
+  -n [ --nodeids ] arg                  The IDs of the nodes from which the 
+                                        export will be started. For example: 
+                                        "ns=2;i=1" "ns=2;s=test"
+  -f [ --file ] arg (=nodeset_export.xml)
+                                        Path with filename to export
+  -u [ --username ] arg                 Authentication username
+  -p [ --password ] arg                 Authentication password
+  -m [ --maxnrd ] arg (=0)              Number of max nodes to request data
+  -t [ --timeout ] arg (=5000)          Response timeout in ms
+  --perftimer arg (=0)                  Enable the performance timer 
+                                        (true/false)
+  --parent arg                          The parent node ID of all of the start 
+                                        nodes, which is replaced by the custom 
+                                        one for the binding. default: "i=85"
+```
+
 ## License
 
 MPL2.0: https://github.com/xydan83/open62541-nodeset-exporter/blob/master/LICENSE
