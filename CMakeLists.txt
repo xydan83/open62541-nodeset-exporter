@@ -225,6 +225,8 @@ if (${NODESETEXPORTER_CLI_ENABLE} OR ${NODESETEXPORTER_BUILD_TESTS})
             tinyxml2
             fmt::fmt
     )
+
+    nodesetexporter_clang_format_setup(${PROJECT_NAME}-for-cli)
 endif ()
 
 add_library(${PROJECT_NAME})
@@ -333,6 +335,7 @@ if (${NODESETEXPORTER_BUILD_TESTS})
     configure_file(test/nodesetexporter/server_nodeset/UANodeSet.xsd ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
 
     add_unit_test(NAME ${PROJECT_NAME}-tests)
+    nodesetexporter_clang_format_setup(${PROJECT_NAME}-tests)
 endif ()
 
 # Connecting the assembly of the executable export utility.
@@ -365,5 +368,3 @@ install(FILES nodesetexporter-config.cmake DESTINATION ${CMAKE_INSTALL_LIBDIR}/c
 install(EXPORT NodesetExporter DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/NodesetExporter)
 
 nodesetexporter_clang_format_setup(${PROJECT_NAME})
-nodesetexporter_clang_format_setup(${PROJECT_NAME}-for-cli)
-nodesetexporter_clang_format_setup(${PROJECT_NAME}-tests)
