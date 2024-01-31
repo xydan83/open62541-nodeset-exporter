@@ -2,8 +2,6 @@
 boost/1.79.0
 tinyxml2/9.0.0
 libxmlpp/5.0.1
-magic_enum/0.8.1
-ms-gsl/4.0.0
 fmt/8.1.1
 doctest/2.4.11
 trompeloeil/47
