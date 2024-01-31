@@ -70,10 +70,8 @@ Conan dependencies:
 
 - boost/1.79.0
 - tinyxml2/9.0.0
-- libxmlpp/5.0.1 (only for tests)
-- magic_enum/0.8.1
-- ms-gsl/4.0.0
 - fmt/8.1.1
+- libxmlpp/5.0.1 (only for tests)
 - doctest/2.4.11 (only for tests)
 - trompeloeil/47 (only for tests)
 
