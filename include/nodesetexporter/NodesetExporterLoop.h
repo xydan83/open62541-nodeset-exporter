@@ -21,8 +21,6 @@
 #include <open62541/types.h>
 #include <open62541/types_generated_handling.h>
 
-#include <gsl/gsl>
-
 #include <map>
 #include <optional>
 #include <set>

@@ -148,9 +148,9 @@ inline UATypesContainer<UA_ReferenceDescription> ReferenceDescriptionGen(UA_Int6
     auto str_dspl_name = "Test display name " + std::to_string(GetRandomNumber(min, UA_UINT32_MAX));
 
     UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-    Ensures(UA_NodeId_parse(&ref_desc_cnt.GetRef().referenceTypeId, UA_String_fromChars(str_ref_type_id.c_str())) == UA_STATUSCODE_GOOD);
-    Ensures(UA_NodeId_parse(&ref_desc_cnt.GetRef().nodeId.nodeId, UA_String_fromChars(str_node_id.c_str())) == UA_STATUSCODE_GOOD);
-    Ensures(UA_NodeId_parse(&ref_desc_cnt.GetRef().typeDefinition.nodeId, UA_String_fromChars(str_type_def.c_str())) == UA_STATUSCODE_GOOD);
+    CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt.GetRef().referenceTypeId, UA_String_fromChars(str_ref_type_id.c_str())), UA_STATUSCODE_GOOD);
+    CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt.GetRef().nodeId.nodeId, UA_String_fromChars(str_node_id.c_str())), UA_STATUSCODE_GOOD);
+    CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt.GetRef().typeDefinition.nodeId, UA_String_fromChars(str_type_def.c_str())), UA_STATUSCODE_GOOD);
     ref_desc_cnt.GetRef().isForward = is_forward;
     ref_desc_cnt.GetRef().browseName.namespaceIndex = 1;
     ref_desc_cnt.GetRef().browseName.name = UA_String_fromChars(str_br_name.c_str());

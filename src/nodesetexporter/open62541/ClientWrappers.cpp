@@ -8,15 +8,16 @@
 
 #include "nodesetexporter/open62541/ClientWrappers.h"
 
-#include <gsl/gsl>
-
 namespace nodesetexporter::open62541
 {
 
 StatusResults Open62541ClientWrapper::BrowseNext(UA_ByteString* const continuation_point, std::vector<UATypesContainer<UA_ReferenceDescription>>& result_nodes)
 {
     m_logger.Trace("Method called: BrowseNext()");
-    Expects(continuation_point);
+    if (continuation_point == nullptr)
+    {
+        throw std::runtime_error("continuation_point is null");
+    }
     UATypesContainer<UA_BrowseNextRequest> b_next_req(UA_TYPES_BROWSENEXTREQUEST);
     UA_BrowseNextRequest_init(&b_next_req.GetRef());
 
@@ -51,8 +52,14 @@ StatusResults Open62541ClientWrapper::BrowseNext(UA_ByteString* const continuati
             m_logger.Warning("Browse Next has uncertain value from Open62541: {}", UA_StatusCode_name(response.value.responseHeader.serviceResult));
         }
 
-        Expects(response.value.results);
-        Expects(response.value.resultsSize == 1);
+        if (response.value.results == nullptr)
+        {
+            throw std::runtime_error("response.value.results == nullptr");
+        }
+        if (response.value.resultsSize != 1)
+        {
+            throw std::runtime_error("response.value.resultsSize != 1");
+        }
         m_logger.Debug("{} references received", response.value.results[0].referencesSize); // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         for (size_t j = 0; j < response.value.results[0].referencesSize; ++j) // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         {
@@ -137,7 +144,9 @@ StatusResults Open62541ClientWrapper::ReadNodeClasses(std::vector<NodeClassesReq
     m_logger.Trace("Method called: ReadNodeClasses()");
 
     std::vector<UA_ReadValueId> read_value_ids(node_class_structure_lists.size());
-    Expects(read_value_ids.size() == node_class_structure_lists.size());
+    if (read_value_ids.size() != node_class_structure_lists.size())
+    {
+    }
     for (size_t index = 0; index < node_class_structure_lists.size(); index++)
     {
         UA_NodeId_copy(&node_class_structure_lists.at(index).exp_node_id.GetRef().nodeId, &read_value_ids.at(index).nodeId);
@@ -179,7 +188,10 @@ StatusResults Open62541ClientWrapper::ReadNodeReferences(std::vector<NodeReferen
     UA_BrowseRequest_init(&b_req);
     // Creating nodesToBrowse structures
     std::vector<UA_BrowseDescription> b_req_vector(node_references_structure_lists.size()); //<-- Owner (The Vector will delete the contents itself when the method exits)
-    Expects(node_references_structure_lists.size() == b_req_vector.size());
+    if (node_references_structure_lists.size() != b_req_vector.size())
+    {
+        throw std::runtime_error("node_references_structure_lists.size() != b_req_vector.size()");
+    }
     // Fill the contents of the created objects of the UA_BrowseDescription structures
     m_logger.Debug("--------------------------------------");
     m_logger.Debug("Prepare query parent NodeID[{}] --> references NodeIDs. Name of sent nodes:", node_references_structure_lists.size());
@@ -227,7 +239,10 @@ StatusResults Open62541ClientWrapper::ReadNodeReferences(std::vector<NodeReferen
         m_logger.Warning("Browse has uncertain value from Open62541: {}", UA_StatusCode_name(response.value.responseHeader.serviceResult));
     }
 
-    Expects(response.value.results);
+    if (response.value.results == nullptr)
+    {
+        throw std::runtime_error("response.value.results == nullptr");
+    }
 
     for (size_t node_index = 0; node_index < response.value.resultsSize; ++node_index)
     {
@@ -289,7 +304,10 @@ StatusResults Open62541ClientWrapper::ReadNodesAttributes(std::vector<NodeAttrib
         }
     }
     size_t& flat_attr_numbers = attr_index;
-    Expects(read_value_ids.size() == flat_attr_numbers);
+    if (read_value_ids.size() != flat_attr_numbers)
+    {
+        throw std::runtime_error("read_value_ids.size() != flat_attr_numbers");
+    }
 
     std::vector<std::optional<VariantsOfAttr>> variants(flat_attr_numbers);
     StatusResults result = ReadNodesAttributes(

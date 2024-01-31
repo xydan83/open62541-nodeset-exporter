@@ -12,7 +12,6 @@
 #include <open62541/types_generated_handling.h>
 
 #include <doctest/doctest.h>
-#include <gsl/gsl>
 
 #include <set>
 #include <string>
@@ -29,7 +28,7 @@ TEST_SUITE("nodesetexporter::open62541")
         std::string node_id_txt = "ns=65;s=";
         node_id_txt.append(node_string_name);
 
-        Ensures(UA_NodeId_parse(&ua_node_id, UA_String_fromChars(node_id_txt.c_str())) == UA_STATUSCODE_GOOD);
+        CHECK_EQ(UA_NodeId_parse(&ua_node_id, UA_String_fromChars(node_id_txt.c_str())), UA_STATUSCODE_GOOD);
 
         SUBCASE("Testing a Constructor with a Container Type Parameter")
         {
@@ -189,9 +188,9 @@ TEST_SUITE("nodesetexporter::open62541")
     TEST_CASE("std::less<UATypesContainer<TUA_Struct>>") // NOLINT
     {
         UA_NodeId ua_node_id_1;
-        Ensures(UA_NodeId_parse(&ua_node_id_1, UA_String_fromChars("ns=2;i=1")) == UA_STATUSCODE_GOOD);
+        CHECK_EQ(UA_NodeId_parse(&ua_node_id_1, UA_String_fromChars("ns=2;i=1")), UA_STATUSCODE_GOOD);
         UA_NodeId ua_node_id_2;
-        Ensures(UA_NodeId_parse(&ua_node_id_2, UA_String_fromChars("ns=2;i=10")) == UA_STATUSCODE_GOOD);
+        CHECK_EQ(UA_NodeId_parse(&ua_node_id_2, UA_String_fromChars("ns=2;i=10")), UA_STATUSCODE_GOOD);
         UATypesContainer<UA_NodeId> c_ua_nodeid1(ua_node_id_1, UA_TYPES_NODEID);
         UATypesContainer<UA_NodeId> c_ua_nodeid1_sec(ua_node_id_1, UA_TYPES_NODEID);
         UATypesContainer<UA_NodeId> c_ua_nodeid2(ua_node_id_2, UA_TYPES_NODEID);

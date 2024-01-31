@@ -8,6 +8,8 @@
 
 #include "nodesetexporter/logger/LogPlugin.h"
 
+#include <array>
+
 namespace nodesetexporter::logger
 {
 
@@ -66,12 +68,34 @@ inline void Open62541LogPlugin::UaLogStdoutLog(void* context, UA_LogLevel level,
     }
 }
 
+inline std::string LogCategoryEnumToString(UA_LogCategory log) noexcept
+{
+    switch (log)
+    {
+    case UA_LOGCATEGORY_NETWORK:
+        return "UA_LOGCATEGORY_NETWORK";
+    case UA_LOGCATEGORY_SECURECHANNEL:
+        return "UA_LOGCATEGORY_SECURECHANNEL";
+    case UA_LOGCATEGORY_SESSION:
+        return "UA_LOGCATEGORY_SESSION";
+    case UA_LOGCATEGORY_SERVER:
+        return "UA_LOGCATEGORY_SERVER";
+    case UA_LOGCATEGORY_CLIENT:
+        return "UA_LOGCATEGORY_CLIENT";
+    case UA_LOGCATEGORY_USERLAND:
+        return "UA_LOGCATEGORY_USERLAND";
+    case UA_LOGCATEGORY_SECURITYPOLICY:
+        return "UA_LOGCATEGORY_SECURITYPOLICY";
+    }
+    return "UA_UNKNOWN";
+}
+
 inline void Open62541LogPlugin::ToLog(LoggerBase* logger, LogLevel level, UA_LogCategory& category, const char* msg, va_list args)
 {
     // Since the buffer is static, memory will be allocated once and the buffer will be used without relocation.
     // There is no need to overwrite the buffer either, since the end of the line will be determined by the line terminator.
     static std::array<char, txt_buffer_size> formatted;
     auto num = vsnprintf(formatted.data(), formatted.size(), msg, args);
-    logger->Log(level, "[{}] {}", magic_enum::enum_name(category), std::string(formatted.data(), num));
+    logger->Log(level, "[{}] {}", LogCategoryEnumToString(category), std::string(formatted.data(), num));
 }
 } // namespace nodesetexporter::logger

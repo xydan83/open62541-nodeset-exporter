@@ -14,7 +14,6 @@
 #include <open62541/types_generated_handling.h>
 
 #include <doctest/doctest.h>
-#include <gsl/gsl>
 
 #include <string>
 
@@ -28,9 +27,9 @@ TEST_SUITE("nodesetexporter::open62541")
     {
         // SET
         UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-        Ensures(UA_NodeId_parse(&ref_desc_cnt.GetRef().referenceTypeId, UA_String_fromChars("i=89")) == UA_STATUSCODE_GOOD);
-        Ensures(UA_NodeId_parse(&ref_desc_cnt.GetRef().nodeId.nodeId, UA_String_fromChars("ns=2;i=10")) == UA_STATUSCODE_GOOD);
-        Ensures(UA_NodeId_parse(&ref_desc_cnt.GetRef().typeDefinition.nodeId, UA_String_fromChars("i=26")) == UA_STATUSCODE_GOOD);
+        CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt.GetRef().referenceTypeId, UA_String_fromChars("i=89")), UA_STATUSCODE_GOOD);
+        CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt.GetRef().nodeId.nodeId, UA_String_fromChars("ns=2;i=10")), UA_STATUSCODE_GOOD);
+        CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt.GetRef().typeDefinition.nodeId, UA_String_fromChars("i=26")), UA_STATUSCODE_GOOD);
         ref_desc_cnt.GetRef().isForward = false;
         ref_desc_cnt.GetRef().browseName.namespaceIndex = 1;
         ref_desc_cnt.GetRef().browseName.name = UA_String_fromChars("Test browse name");
@@ -39,9 +38,9 @@ TEST_SUITE("nodesetexporter::open62541")
         ref_desc_cnt.GetRef().displayName.text = UA_String_fromChars("Test display name");
 
         UATypesContainer<UA_ReferenceDescription> ref_desc_cnt2(UA_TYPES_REFERENCEDESCRIPTION);
-        Ensures(UA_NodeId_parse(&ref_desc_cnt2.GetRef().referenceTypeId, UA_String_fromChars("i=90")) == UA_STATUSCODE_GOOD);
-        Ensures(UA_NodeId_parse(&ref_desc_cnt2.GetRef().nodeId.nodeId, UA_String_fromChars("ns=2;i=11")) == UA_STATUSCODE_GOOD);
-        Ensures(UA_NodeId_parse(&ref_desc_cnt2.GetRef().typeDefinition.nodeId, UA_String_fromChars("i=46")) == UA_STATUSCODE_GOOD);
+        CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt2.GetRef().referenceTypeId, UA_String_fromChars("i=90")), UA_STATUSCODE_GOOD);
+        CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt2.GetRef().nodeId.nodeId, UA_String_fromChars("ns=2;i=11")), UA_STATUSCODE_GOOD);
+        CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt2.GetRef().typeDefinition.nodeId, UA_String_fromChars("i=46")), UA_STATUSCODE_GOOD);
         ref_desc_cnt2.GetRef().isForward = false;
         UA_QualifiedName br_name2{1, UA_String_fromChars("TestNodes2")};
         ref_desc_cnt2.GetRef().browseName = br_name2;
@@ -54,13 +53,13 @@ TEST_SUITE("nodesetexporter::open62541")
         auto node_class = UA_NodeClass::UA_NODECLASS_VARIABLE;
 
         UATypesContainer<UA_ExpandedNodeId> parent_id(UA_TYPES_EXPANDEDNODEID);
-        Ensures(UA_NodeId_parse(&parent_id.GetRef().nodeId, UA_String_fromChars("i=65")) == UA_STATUSCODE_GOOD);
+        CHECK_EQ(UA_NodeId_parse(&parent_id.GetRef().nodeId, UA_String_fromChars("i=65")), UA_STATUSCODE_GOOD);
 
         UATypesContainer<UA_ExpandedNodeId> node_id(UA_TYPES_EXPANDEDNODEID);
-        Ensures(UA_NodeId_parse(&node_id.GetRef().nodeId, UA_String_fromChars("ns=1;i=1")) == UA_STATUSCODE_GOOD);
+        CHECK_EQ(UA_NodeId_parse(&node_id.GetRef().nodeId, UA_String_fromChars("ns=1;i=1")), UA_STATUSCODE_GOOD);
 
         UATypesContainer<UA_NodeId> data_type(UA_TYPES_NODEID);
-        Ensures(UA_NodeId_parse(&data_type.GetRef(), UA_String_fromChars("ns=2;i=120")) == UA_STATUSCODE_GOOD);
+        CHECK_EQ(UA_NodeId_parse(&data_type.GetRef(), UA_String_fromChars("ns=2;i=120")), UA_STATUSCODE_GOOD);
         auto data_type_v = std::make_optional<VariantsOfAttr>({data_type});
 
         std::map<UA_AttributeId, std::optional<VariantsOfAttr>> map_of_attr{

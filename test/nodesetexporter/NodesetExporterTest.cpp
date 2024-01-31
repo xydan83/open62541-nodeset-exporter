@@ -79,7 +79,7 @@ auto OpcUaServerStart()
             // Since when updating the Open62541 library to commit 6287f35545e397b1a7384906859f5b504db6dc25, changes were made in which the creation of a server via UA_Server_new
             // starts writing the log to std::out, which negatively affects the display of logs in CLION. Therefore, changes have been made - first I create the config,
             // and only then the Server itself. Moreover, when creating a Client there are no such changes.
-            UA_ServerConfig config = {0};
+            UA_ServerConfig config = {nullptr};
             Logger logger("server-test");
             config.logger = LoggerPlugin::Open62541LoggerCreator(logger);
             auto retval = UA_ServerConfig_setDefault(&config);

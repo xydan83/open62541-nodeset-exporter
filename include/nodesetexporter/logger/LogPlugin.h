@@ -13,8 +13,6 @@
 
 #include <open62541/plugin/log.h>
 
-#include <magic_enum.hpp>
-
 namespace nodesetexporter::logger
 {
 

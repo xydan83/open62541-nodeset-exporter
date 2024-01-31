@@ -9,7 +9,6 @@
 #ifndef NODESETEXPORTER_XMLHELPERFUNCTIONS_H
 #define NODESETEXPORTER_XMLHELPERFUNCTIONS_H
 
-#include <gsl/gsl>
 #include <libxml++/libxml++.h> // Used for XML validation with XSD schema and node access
 
 #include <sstream>
@@ -29,7 +28,10 @@ static void CheckXMLNode( // NOLINT(misc-no-recursion)
     std::string cmp_node_text = std::string(""),
     std::map<std::string, std::string> cmp_attrs = std::map<std::string, std::string>())
 {
-    Expects(node != nullptr);
+    if (node == nullptr)
+    {
+        throw std::invalid_argument("node == nullptr");
+    }
 
     const auto* const nodeText = dynamic_cast<const xmlpp::TextNode*>(node);
     const auto* const nodeComment = dynamic_cast<const xmlpp::CommentNode*>(node);

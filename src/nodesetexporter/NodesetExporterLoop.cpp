@@ -73,7 +73,10 @@ StatusResults NodesetExporterLoop::GetNodeAttributes(
     {
         return StatusResults::Fail;
     }
-    Ensures(range_for_nodes.second - range_for_nodes.first == nodes_attr_req_res.size());
+    if (range_for_nodes.second - range_for_nodes.first != nodes_attr_req_res.size())
+    {
+        throw std::runtime_error("range_for_nodes.second - range_for_nodes.first != nodes_attr_req_res.size()");
+    }
     return StatusResults::Good;
 }
 
@@ -93,7 +96,10 @@ StatusResults NodesetExporterLoop::GetNodeReferences(
     {
         return StatusResults::Fail;
     }
-    Ensures(range_for_nodes.second - range_for_nodes.first == node_references_req_res.size());
+    if (range_for_nodes.second - range_for_nodes.first != node_references_req_res.size())
+    {
+        throw std::runtime_error("range_for_nodes.second - range_for_nodes.first != node_references_req_res.size()");
+    }
     return StatusResults::Good;
 }
 
@@ -534,14 +540,20 @@ StatusResults NodesetExporterLoop::GetNodesData(
         nim.SetExpNodeId(node_ids[index].GetRef()); // Copy (must not change the source)
 
         // ParentNodeID
-        Ensures(t_parent_node_id);
+        if (t_parent_node_id == nullptr)
+        {
+            throw std::runtime_error("t_parent_node_id == nullptr");
+        }
         nim.SetParentNodeId(std::move(*t_parent_node_id));
 
         // NodeClass
         nim.SetNodeClass(node_classes_req_res[index].node_class); // Copy
 
         // NodeReferences
-        Ensures(!node_references_req_res[index_from_zero].references.empty());
+        if (node_references_req_res[index_from_zero].references.empty())
+        {
+            throw std::runtime_error("node_references_req_res[index_from_zero].references.empty()");
+        }
         nim.SetNodeReferences(std::move(node_references_req_res[index_from_zero].references)); // Move
 
         // NodeAttributes
@@ -748,7 +760,10 @@ StatusResults NodesetExporterLoop::StartExport()
             }
             GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "GetNodeClasses operation: ", "");
 
-            Ensures(list_of_nodes_from_one_start_node.second.size() == node_classes_req_res.size());
+            if (list_of_nodes_from_one_start_node.second.size() != node_classes_req_res.size())
+            {
+                throw std::runtime_error("list_of_nodes_from_one_start_node.second.size() != node_classes_req_res.size()");
+            }
 
             RESET_TIMER(timer);
             // Create a list of ignored nodes
@@ -880,7 +895,10 @@ StatusResults NodesetExporterLoop::StartExport()
             }
             GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "get_node_classes operation: ", "");
 
-            Ensures(list_of_nodes_from_one_start_node.second.size() == node_classes_req_res.size());
+            if (list_of_nodes_from_one_start_node.second.size() != node_classes_req_res.size())
+            {
+                throw std::runtime_error("list_of_nodes_from_one_start_node.second.size() != node_classes_req_res.size()");
+            }
 
             // IMPORTANT: Since node classes are also index-bound, but all classes have already been obtained in advance,
             // it is necessary to synchronize the indexes of the classes and other structures of index-dependent nodes!
