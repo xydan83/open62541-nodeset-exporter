@@ -21,44 +21,50 @@ if (${NODESETEXPORTER_CLANG_FORMAT_ENABLE})
         message(FATAL_ERROR "ClangFormat: unable to find clang-format binary")
     endif ()
 
-    set(CLANG_FORMAT_INCLUDE_PATTERNS ${CLANG_FORMAT_SOURCE_PATTERNS} *.c *.cc *.cpp *.cxx *.h *.hpp *.hxx)
-    set(CLANG_FORMAT_EXCLUDE_PATTERNS ${CLANG_FORMAT_EXCLUDE_PATTERNS} ${CMAKE_SOURCE_DIR}/venv)
-    set(CLANG_FORMAT_EXCLUDE_PATTERNS ${CLANG_FORMAT_EXCLUDE_PATTERNS} ${CMAKE_SOURCE_DIR}/cmake-) # CMake build directories
-    set(CLANG_FORMAT_EXCLUDE_PATTERNS ${CLANG_FORMAT_EXCLUDE_PATTERNS} ${CMAKE_SOURCE_DIR}/build) # CMake build directories
-    set(CLANG_FORMAT_EXCLUDE_PATTERNS ${CLANG_FORMAT_EXCLUDE_PATTERNS} ${CMAKE_BINARY_DIR})
-
-    file(GLOB_RECURSE CLANG_FORMAT_SOURCE_FILES ${CLANG_FORMAT_INCLUDE_PATTERNS})
-    foreach (SOURCE_FILE ${CLANG_FORMAT_SOURCE_FILES})
-        foreach (EXCLUDE_PATTERN ${CLANG_FORMAT_EXCLUDE_PATTERNS})
-            string(FIND ${SOURCE_FILE} ${EXCLUDE_PATTERN} EXCLUDE_FOUND)
-            if (NOT ${EXCLUDE_FOUND} EQUAL -1)
-                list(REMOVE_ITEM CLANG_FORMAT_SOURCE_FILES ${SOURCE_FILE})
-            endif ()
-        endforeach ()
-    endforeach ()
-
-    add_custom_target(
-            ClangFormat
-            ALL
-            COMMAND
-            ${NODESETEXPORTER_CLANG_FORMAT_EXE}
-            -style=file
-            --dry-run
-            -Werror
-            ${CLANG_FORMAT_SOURCE_FILES}
-    )
-
-    add_custom_target(
-            ClangFormatFix
-            COMMAND
-            ${NODESETEXPORTER_CLANG_FORMAT_EXE}
-            -style=file
-            -i
-            -Werror
-            ${CLANG_FORMAT_SOURCE_FILES}
-    )
-
+    add_custom_target(ClangFormat ALL)
 else ()
     message(WARNING "ClangFormat: disabled")
 endif ()
 
+
+function(nodesetexporter_clang_format_setup target)
+    if (${NODESETEXPORTER_CLANG_FORMAT_ENABLE})
+        get_target_property(target_type ${target} TYPE)
+        if (${target_type} STREQUAL "INTERFACE_LIBRARY")
+            get_target_property(target_sources ${target} INTERFACE_SOURCES)
+        else ()
+            get_target_property(target_sources ${target} SOURCES)
+        endif ()
+
+        list(FILTER target_sources INCLUDE REGEX "\\.(c|cc|cpp|cxx|h|hpp|hxx)$")
+
+        # Часть файлов исходных кодов является авто-генерируемой, поэтому требуется использовать полные пути до файлов.
+        set(target_source_paths)
+        foreach (target_source ${target_sources})
+            if (EXISTS "${target_source}")
+                list(APPEND target_source_paths "${target_source}")
+            elseif (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${target_source}")
+                list(APPEND target_source_paths "${CMAKE_CURRENT_SOURCE_DIR}/${target_source}")
+            else ()
+                list(APPEND target_source_paths "${CMAKE_CURRENT_BINARY_DIR}/${target_source}")
+            endif ()
+        endforeach ()
+
+        if (target_sources)
+            add_custom_target(
+                    ${target}-clang-format
+                    COMMAND
+                    ${NODESETEXPORTER_CLANG_FORMAT_EXE}
+                    -style=file
+                    --dry-run
+                    -Werror
+                    ${target_source_paths}
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                    COMMENT "Analyzing ${target} sources with clang-format..."
+            )
+            add_dependencies(ClangFormat ${target}-clang-format)
+        else ()
+            message(STATUS "ClangFormat: no source found for ${target}")
+        endif ()
+    endif ()
+endfunction()

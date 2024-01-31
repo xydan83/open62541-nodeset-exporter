@@ -25,10 +25,11 @@ if (${NODESETEXPORTER_CLANG_TIDY_ENABLE})
             CMAKE_CXX_CLANG_TIDY
             ${NODESETEXPORTER_CLANG_TIDY_EXE}
             -format-style=file
+            # For clang-tidy, support for C++ Coroutines is provided by a different flag than for GCC.
+            --extra-arg=-fcoroutines-ts
             -p ${CMAKE_BINARY_DIR}
     )
 
 else ()
     message(WARNING "ClangTidy: disabled")
 endif ()
-

@@ -71,6 +71,18 @@ include(.cmake/ClangTidy.cmake)
 
 if (${NODESETEXPORTER_CONAN_ENABLE})
     include(.cmake/Conan.cmake)
+
+    # Using the build directory for the Conan cache, not considering others.
+    if (NOT DEFINED ENV{CONAN_USER_HOME})
+        set(ENV{CONAN_USER_HOME} ${CMAKE_BINARY_DIR})
+    endif ()
+
+    # Check out the Conan version
+    conan_check(
+            REQUIRED
+            VERSION 1.61.0
+    )
+
     # Install Conan configuration (repositories, profiles, etc.).
     conan_config_install(ITEM ${CMAKE_SOURCE_DIR}/.conan/config)
     # Install dependencies using Conan.
@@ -87,10 +99,6 @@ if (${NODESETEXPORTER_CONAN_ENABLE})
     set(CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR} ${CMAKE_MODULE_PATH})
     set(CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR} ${CMAKE_PREFIX_PATH})
     #
-    #    # Do not include external libraries supplied by Conan in the analysis.
-    foreach (CONAN_MODULE_PATH ${CONAN_CMAKE_MODULE_PATH})
-        set(CONNECTORS_COVERAGE_EXCLUDES ${CONNECTORS_COVERAGE_EXCLUDES} "${CONAN_MODULE_PATH}/*")
-    endforeach ()
 endif ()
 
 # Connect the Boost library
@@ -120,10 +128,6 @@ endif ()
 # Since in the Open62541 library, from some version (or commit), the UA_print function produces the result in quotes,
 # when the definition is activated, the quotes will be removed. (necessary for compatibility).
 # add_compile_definitions(OPEN62541_UAPRINT_WITH_QUOTES)
-# Connect the Microsoft Standards Library
-find_package(GSL)
-# Connect the static reflection library for enum
-find_package(magic_enum)
 
 if (NODESETEXPORTER_PERFORMANCE_TIMER_ENABLED)
     message("Performance timer code has been added to nodesetexporter.")
@@ -219,7 +223,6 @@ if (${NODESETEXPORTER_CLI_ENABLE} OR ${NODESETEXPORTER_BUILD_TESTS})
             PRIVATE
             open62541::open62541
             tinyxml2
-            magic_enum::magic_enum
             fmt::fmt
     )
 endif ()
@@ -249,7 +252,6 @@ target_link_libraries(
         PRIVATE
         open62541::open62541
         tinyxml2
-        magic_enum::magic_enum
         fmt::fmt
 )
 
@@ -315,7 +317,6 @@ if (${NODESETEXPORTER_BUILD_TESTS})
             lib-testing
             doctest::doctest
             trompeloeil::trompeloeil
-            magic_enum::magic_enum
             tinyxml2
             ${XMLPLUSPLUS})
 
@@ -362,3 +363,7 @@ install(TARGETS ${PROJECT_NAME}
 install(FILES nodesetexporter-config.cmake DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/NodesetExporter)
 
 install(EXPORT NodesetExporter DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/NodesetExporter)
+
+nodesetexporter_clang_format_setup(${PROJECT_NAME})
+nodesetexporter_clang_format_setup(${PROJECT_NAME}-for-cli)
+nodesetexporter_clang_format_setup(${PROJECT_NAME}-tests)

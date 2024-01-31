@@ -37,3 +37,6 @@ target_link_libraries(
         ${PROJECT_NAME}
 )
 add_unit_test(NAME ${PROJECT_NAME}-tests)
+
+nodesetexporter_clang_format_setup(${PROJECT_NAME})
+nodesetexporter_clang_format_setup(${PROJECT_NAME}-tests)
