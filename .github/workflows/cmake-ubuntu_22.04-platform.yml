@@ -1,0 +1,65 @@
+# This starter workflow is for a CMake project running on a single platform. There is a different starter workflow if you need cross-platform coverage.
+# See: https://github.com/actions/starter-workflows/blob/main/ci/cmake-multi-platform.yml
+name: CMake on a single platform
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Debug
+  CLANG_VERSION: 14
+  GCC_VERSION: 12
+jobs:
+  build:
+    # The CMake configure and build commands are platform-agnostic and should work equally well on Windows or Mac.
+    # You can convert this to a matrix build if you need cross-platform coverage.
+    # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Fetch
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt update
+          sudo apt-get -y --no-install-suggests --no-install-recommends install curl git make cmake clang-format-${{env.CLANG_VERSION}} clang-tidy-${{env.CLANG_VERSION}} gcovr libc-dev make jq python3 python3-pip gcc-${{env.GCC_VERSION}} g++-${{env.GCC_VERSION}} gdb
+          pip3 install --no-cache-dir "conan>=1.0,<2.0" 
+          sudo update-alternatives \
+          --install /usr/bin/gcc gcc /usr/bin/gcc-${{env.GCC_VERSION}} 100 \
+          --slave /usr/bin/g++ g++ /usr/bin/g++-${{env.GCC_VERSION}} \
+          --slave /usr/bin/gcov gcov /usr/bin/gcov-${{env.GCC_VERSION}}
+          sudo update-alternatives \
+          --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-${{env.CLANG_VERSION}} 100
+
+      - name: Install Open62541
+        run: |
+          git clone https://github.com/open62541/open62541.git
+          cd open62541
+          git checkout tags/v1.3
+          git submodule update --init --recursive
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DUA_NAMESPACE_ZERO=FULL ..
+          sudo make install
+
+      - name: Configure CMake
+        # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+        # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+        # WARNING ClangTidy is temporarily disabled due to an error occurring.
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNODESETEXPORTER_CLANG_FORMAT_ENABLE=ON -DNODESETEXPORTER_CLANG_TIDY_ENABLE=OFF -DNODESETEXPORTER_PERFORMANCE_TIMER_ENABLED=ON -DNODESETEXPORTER_BUILD_TESTS=ON -DNODESETEXPORTER_CLI_ENABLE=ON
+
+      - name: Build
+        # Build your program with the given configuration
+        run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+      - name: Test
+        working-directory: ${{github.workspace}}/build
+        # Execute tests defined by the CMake configuration.
+        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+        run: ctest -C ${{env.BUILD_TYPE}}
