@@ -77,6 +77,7 @@ Conan dependencies:
 
 To build the environment, you can use the **install-build-deps.sh** script if you are working on Ubuntu 20 (Focal Fossa)
 or 22 (Jammy Jellyfish) version or add your version to the following part of the code:
+
 ```bash
     case "${VERSION}" in
     *Focal* | *Jammy*) # <-- Here
@@ -114,6 +115,16 @@ BUILD_SHARED_LIBS - Allows you to build a shared library with dynamic linking in
 You can change the above settings in your project file (for example in CMakeLists.txt) using `set(*param* ON/OFF)` when
 building via submodules or using variables `cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON ..` when building
 via the command line.
+
+### To pass tests
+
+Since the tests try to cover the maximum number of different options for using the library, the tests are designed to
+build the Open62541 library with the maximum number of zero node space types.
+If you want to run tests, you must first build and install the Open62541 library with the following parameter:
+
+```shell
+-DUA_NAMESPACE_ZERO=FULL
+```
 
 ## Examples
 
