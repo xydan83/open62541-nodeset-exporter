@@ -42,7 +42,7 @@ Planned:
 
 ⭕ Using the Open62541 Server to collect information for export \
 ⭕ Support Definition (DataTypeDefinition) in UADataTypes \
-⭕ Collect and export UAReferenceTypes (NonHierarhicalReference) \
+⭕ Collect and export all custom types \
 ⭕ Support for exporting Values in Variable and VariableType class nodes \
 ⭕ Exporting UAView \
 ⭕ Windows build support
