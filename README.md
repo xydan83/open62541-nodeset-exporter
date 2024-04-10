@@ -4,8 +4,7 @@
 
 A C++ 20 project for exporting a nodeset to xml and other formats.
 The main dependency of the project is the [Open62541](https://github.com/open62541/open62541) library. This library must
-be pre-compiled and installed on the system. The supported library version is Open62541 1.3.x. Version 1.4-rc(x) is not
-currently supported, but is planned for support.
+be pre-compiled and installed on the system. The supported library version is Open62541 1.3.x - 1.4.0.
 
 The nodesetexporter library, using the client (and in the future, the server) of the Open62541 library, collects the
 necessary data from the remote OPC UA server specified to the client and converts this data into an export file in XML
@@ -30,6 +29,7 @@ is able to participate in the development of the project. :)
 Already done:
 
 ✅ Linux build support \
+✅ Support Open62541 1.3.x and 1.4.0 versions \
 ✅ Export of multiple nodes \
 ✅ Export to XML (verified using UANodeSet.xsd) \
 ✅ You can add other export modules using the IEncoder interface, not just XML (but it will be outside the standard) \
@@ -42,7 +42,7 @@ Planned:
 
 ⭕ Using the Open62541 Server to collect information for export \
 ⭕ Support Definition (DataTypeDefinition) in UADataTypes \
-⭕ Collect and export UAReferenceTypes (NonHierarhicalReference) \
+⭕ Collect and export all custom data types \
 ⭕ Support for exporting Values in Variable and VariableType class nodes \
 ⭕ Exporting UAView \
 ⭕ Windows build support
@@ -64,7 +64,7 @@ To build you will need installed in your system:
 - cmake
 - GCC (C++20 features are available since GCC 8, but development was carried out on GCC 12).
   https://gcc.gnu.org/projects/cxx-status.html
-- pre-compiled and pre-installed open62541 version 1.3.x
+- pre-compiled and pre-installed open62541 version 1.3.x or 1.4.x
 
 Conan dependencies:
 
@@ -110,6 +110,7 @@ NODESETEXPORTER_BUILD_TESTS - This option allows you to disable the build of tes
 NODESETEXPORTER_CLI_ENABLE - This option allows you to create a command utility that can export a set of nodes from the OPC UA Server node space. (default: OFF)
 NODESETEXPORTER_OPEN62541_IS_SUBMODULE - If you want to add the open62541 library as a static submodule set ON. (default OFF)
 BUILD_SHARED_LIBS - Allows you to build a shared library with dynamic linking instead of a library with static linking. (default: OFF)
+OPEN62541_VERSIONS - What version of the Open62541 library are you using? Switch between "v1.3.x" "v1.4.x". (default: v1.3.x)
 ```
 
 You can change the above settings in your project file (for example in CMakeLists.txt) using `set(*param* ON/OFF)` when
