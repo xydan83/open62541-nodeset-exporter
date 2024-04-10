@@ -40,6 +40,7 @@ void Application::PrintHelp(std::ostream& out, const boost::program_options::opt
 void Application::PrintVersion(std::ostream& out) const
 {
     out << "Application version: " << build::version << std::endl;
+    out << "Open62541 library version: " << UA_OPEN62541_VERSION << std::endl;
     out << "Git hash: " << build::git_revision << std::endl;
     out << "Compiler: " << build::compiler << std::endl;
     out << "Build type: " << build::build_type << std::endl;
@@ -114,7 +115,7 @@ int Application::OptionsCliPars()
 
 void Application::SignalSet()
 {
-    // Setting up signal processing to stop the connector
+    // Setting up signal processing to stop the program
     m_signal_set.clear();
     m_signal_set.add(SIGINT);
     m_signal_set.add(SIGTERM);
@@ -281,7 +282,13 @@ int Application::Run()
         m_client = UA_Client_new();
         m_logger_main.Info("Configuration the Open62541 Client");
         auto* cli_config = UA_Client_getConfig(m_client);
+#ifdef OPEN62541_VER_1_3
         cli_config->logger = ::nodesetexporter::logger::Open62541LogPlugin::Open62541LoggerCreator(m_opc_ua_client_logger);
+#elif defined(OPEN62541_VER_1_4)
+        auto logging = ::nodesetexporter::logger::Open62541LogPlugin::Open62541LoggerCreator(m_opc_ua_client_logger);
+        cli_config->logging = &logging;
+        cli_config->eventLoop->logger = &logging;
+#endif
         UA_ClientConfig_setDefault(cli_config);
         cli_config->timeout = m_client_timeout;
 

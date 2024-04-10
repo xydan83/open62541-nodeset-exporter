@@ -10,6 +10,7 @@
 #define NODESETEXPORTER_NODESETEXPORTERLOOP_H
 
 #include "nodesetexporter/common/LoggerBase.h"
+#include "nodesetexporter/common/Open62541CompatibilityCheck.h"
 #include "nodesetexporter/common/Statuses.h"
 #include "nodesetexporter/interfaces/IEncoder.h"
 #include "nodesetexporter/interfaces/IOpen62541.h"

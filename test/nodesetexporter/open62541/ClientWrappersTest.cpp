@@ -94,7 +94,12 @@ auto OpcUaServerStart()
             // Moreover, when creating a Client there are no such changes.
             UA_ServerConfig config = {0};
             Logger logger("server-test");
+#ifdef OPEN62541_VER_1_3
             config.logger = LoggerPlugin::Open62541LoggerCreator(logger);
+#elif defined(OPEN62541_VER_1_4)
+            auto logging = LoggerPlugin::Open62541LoggerCreator(logger);
+            config.logging = &logging;
+#endif
             auto retval = UA_ServerConfig_setDefault(&config);
             REQUIRE_EQ(retval, UA_STATUSCODE_GOOD);
             auto* server = UA_Server_newWithConfig(&config);
@@ -231,7 +236,13 @@ TEST_SUITE("nodesetexporter::open62541")
         auto* client = UA_Client_new();
         auto* cli_config = UA_Client_getConfig(client);
         Logger cli_logger("client-test");
+#ifdef OPEN62541_VER_1_3
         cli_config->logger = LoggerPlugin::Open62541LoggerCreator(cli_logger);
+#elif defined(OPEN62541_VER_1_4)
+        auto logging = LoggerPlugin::Open62541LoggerCreator(cli_logger);
+        cli_config->logging = &logging;
+        cli_config->eventLoop->logger = &logging;
+#endif
         UA_ClientConfig_setDefault(cli_config);
         REQUIRE(UA_StatusCode_isGood(UA_Client_connect(client, "opc.tcp://localhost:4840")));
 

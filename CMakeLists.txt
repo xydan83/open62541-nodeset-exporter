@@ -32,6 +32,16 @@ option(NODESETEXPORTER_CLI_ENABLE "Add nodesetexporter command utility to build"
 option(NODESETEXPORTER_OPEN62541_IS_SUBMODULE "Switch ON this if Open62541 is included as a submodule (built-in) as a static library" OFF)
 # If present and true, this will cause all libraries to be built shared unless the library was explicitly added as a static library.
 option(BUILD_SHARED_LIBS "Build shared library" OFF)
+
+set(OPEN62541_VERSIONS "v1.3.x" "v1.4.x")
+set(OPEN62541_VERSION "v1.3.x" CACHE STRING "What version of the Open62541 library are you using?")
+SET_PROPERTY(CACHE OPEN62541_VERSION PROPERTY STRINGS "v1.3.x" ${OPEN62541_VERSIONS})
+if ("${OPEN62541_VERSION}" STREQUAL "v1.4.x")
+    add_compile_definitions(OPEN62541_VER_1_4)
+    add_compile_definitions(OPEN62541_UAPRINT_WITH_QUOTES)
+else ()
+    add_compile_definitions(OPEN62541_VER_1_3)
+endif ()
 # ---------------------------------------
 
 set(BUILD_TESTING ${NODESETEXPORTER_BUILD_TESTS})
@@ -184,6 +194,7 @@ set(NODESETEXPORTER_INTERNAL_PUBLIC_HEADERS
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/nodesetexporter/common/Encoder_types.h>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/nodesetexporter/common/Strings.h>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/nodesetexporter/common/PerformanceTimer.h>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/nodesetexporter/common/Open62541CompatibilityCheck.h>
         $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/include/nodesetexporter/common/DatatypeAliases.h>
         CACHE INTERNAL "")
 
