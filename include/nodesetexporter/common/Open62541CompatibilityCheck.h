@@ -14,7 +14,10 @@
 #ifdef OPEN62541_VER_1_4
 static_assert((UA_OPEN62541_VER_MAJOR == 1 && UA_OPEN62541_VER_MINOR == 4), "The Open62541 library version parameter is not set correctly");
 #elif defined(OPEN62541_VER_1_3)
-static_assert((UA_OPEN62541_VER_MAJOR == 1 && UA_OPEN62541_VER_MINOR == 3), "The Open62541 library version parameter is not set correctly");
+// Some early versions of Open62541 (3x) have the wrong minor version. I need to make some corrections.
+static_assert(
+    (UA_OPEN62541_VER_MAJOR == 1 && (UA_OPEN62541_VER_MINOR == 3 || (UA_OPEN62541_VER_MINOR == 2 && UA_OPEN62541_VER_PATCH == 2))),
+    "The Open62541 library version parameter is not set correctly");
 #else
 static_assert(false, "Check the Open62541 library version. Support only versions 1.3.x and 1.4.x");
 #endif
