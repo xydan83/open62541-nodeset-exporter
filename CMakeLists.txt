@@ -9,11 +9,11 @@
 cmake_minimum_required(VERSION 3.18)
 
 project(nodesetexporter
-        VERSION 1.1.0
+        VERSION 1.2.0
         HOMEPAGE_URL "https://github.com/xydan83/open62541-nodeset-exporter"
         LANGUAGES C CXX)
 
-set(PROJECT_VERSION_SUFFIX "")
+set(PROJECT_VERSION_SUFFIX "alpha")
 
 include(GNUInstallDirs)
 
