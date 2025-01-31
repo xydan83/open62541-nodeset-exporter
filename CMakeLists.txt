@@ -42,6 +42,7 @@ if ("${OPEN62541_VERSION}" STREQUAL "v1.4.x")
 else ()
     add_compile_definitions(OPEN62541_VER_1_3)
 endif ()
+set(TEST_SERVER_NODESET_DIR "server_nodeset")
 # ---------------------------------------
 
 set(BUILD_TESTING ${NODESETEXPORTER_BUILD_TESTS})
@@ -205,6 +206,7 @@ set(NODESETEXPORTER_INTERNAL_PRIVATE_SOURCE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/nodesetexporter/NodesetExporterLoop.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/nodesetexporter/NodesetExporter.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/nodesetexporter/logger/LogPlugin.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/nodesetexporter/common/Strings.cpp
         CACHE INTERNAL "")
 
 # Forming the nodesetexporter library for cli utility and for tests
@@ -288,8 +290,7 @@ if (${NODESETEXPORTER_BUILD_TESTS})
     # Finding a Dynamic Library for the xml nodeset test
     find_library(XMLPLUSPLUS NAMES xml++-5.0)
     message("libxml++ path: " ${XMLPLUSPLUS})
-
-    SET_SOURCE_FILES_PROPERTIES(${CMAKE_CURRENT_SOURCE_DIR}/test/nodesetexporter/server_nodeset/ex_nodeset.c PROPERTIES COMPILE_FLAGS -O0)
+    SET_SOURCE_FILES_PROPERTIES(${CMAKE_CURRENT_SOURCE_DIR}/test/nodesetexporter/${TEST_SERVER_NODESET_DIR}/ex_nodeset.c PROPERTIES COMPILE_FLAGS -O0)
 
     add_executable(
             ${PROJECT_NAME}-tests
@@ -308,11 +309,13 @@ if (${NODESETEXPORTER_BUILD_TESTS})
     target_sources(
             ${PROJECT_NAME}-tests
             PUBLIC
-            ${CMAKE_CURRENT_SOURCE_DIR}/test/nodesetexporter/server_nodeset/ex_nodeset.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/test/nodesetexporter/${TEST_SERVER_NODESET_DIR}/ex_nodeset.h
             ${CMAKE_CURRENT_SOURCE_DIR}/test/nodesetexporter/common_for_tests/XmlHelperFunctions.h
             ${CMAKE_CURRENT_SOURCE_DIR}/include/nodesetexporter/open62541/UATypesContainer.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/include/nodesetexporter/common/DateTime.h
             PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/test/nodesetexporter/server_nodeset/ex_nodeset.c
+            ${CMAKE_CURRENT_SOURCE_DIR}/test/nodesetexporter/${TEST_SERVER_NODESET_DIR}/ex_nodeset.c
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/nodesetexporter/common/DateTime.cpp
     )
 
     target_include_directories(

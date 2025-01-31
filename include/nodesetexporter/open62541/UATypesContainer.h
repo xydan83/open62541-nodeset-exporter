@@ -12,6 +12,7 @@
 #include <open62541/util.h>
 
 #include <iostream>
+#include <memory>
 
 namespace nodesetexporter::open62541
 {
@@ -28,6 +29,10 @@ class UATypesContainer final
 public:
     UATypesContainer() = delete;
 
+    /**
+     * @brief Creates an empty object of the specified type inside the wrapper.
+     * @param ua_type Type of object created.
+     */
     explicit UATypesContainer(u_int32_t ua_type)
         : m_ua_object(static_cast<TOpen62541Type*>(UA_new(&UA_TYPES[ua_type]))) // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
         , m_ua_type(ua_type)
@@ -36,7 +41,9 @@ public:
     };
 
     /**
-     * @brief Creates an object and makes a deep copy to itself of an object of type TOpen62541Type.
+     * @brief Creates an object and makes a deep copying of an object of type TOpen62541Type.
+     * @param ua_type_obj Link to a copied object type TOpen62541Type.
+     * @param ua_type Type of object TOpen62541Type.
      */
     explicit UATypesContainer(const TOpen62541Type& ua_type_obj, u_int32_t ua_type)
         : m_ua_object(static_cast<TOpen62541Type*>(UA_new(&UA_TYPES[ua_type]))) // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
@@ -45,9 +52,24 @@ public:
         UA_copy(&ua_type_obj, m_ua_object, &UA_TYPES[ua_type]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
     };
 
+    /**
+     * @brief Creates the object of the wrapper and retains the pointer to the object TOpen62541Type without taking it under control of the management of the life cycle, but allows
+     *        Use all the functionality of the wrapper. Zero copying of the object.
+     * @warning As a wrap does not control the life cycle of an internal object, it is necessary to ensure that the object itself exist when calling
+     * any functions of the wrapper. There is no guarantee of a non-change of object of the TOpen62541Type type.
+     * @param ua_type_obj A pointer to an object of the type TOpen62541Type.
+     * @param ua_type Type of object TOpen62541Type.
+     */
+    explicit UATypesContainer(TOpen62541Type* const ua_type_obj, u_int32_t ua_type)
+        : m_ua_type(ua_type)
+        , m_ua_object(ua_type_obj)
+        , m_is_weak_copy(true)
+    {
+    }
+
     ~UATypesContainer()
     {
-        if (m_ua_object != nullptr)
+        if (m_ua_object != nullptr && !m_is_weak_copy)
         {
             UA_delete(m_ua_object, &UA_TYPES[m_ua_type]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
         }
@@ -56,7 +78,6 @@ public:
     UATypesContainer(const UATypesContainer& obj)
         : m_ua_object(static_cast<TOpen62541Type*>(UA_new(&UA_TYPES[obj.m_ua_type]))) // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
         , m_ua_type(obj.m_ua_type)
-        , m_status_code(obj.m_status_code)
     {
         UA_copy(obj.m_ua_object, m_ua_object, &UA_TYPES[obj.m_ua_type]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
     };
@@ -67,7 +88,6 @@ public:
         {
             UA_delete(m_ua_object, &UA_TYPES[m_ua_type]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
             m_ua_type = obj.m_ua_type;
-            m_status_code = obj.m_status_code;
             m_ua_object = static_cast<TOpen62541Type*>(UA_new(&UA_TYPES[m_ua_type])); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
             UA_copy(obj.m_ua_object, m_ua_object, &UA_TYPES[obj.m_ua_type]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
         }
@@ -88,10 +108,8 @@ public:
             UA_delete(m_ua_object, &UA_TYPES[m_ua_type]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
             m_ua_object = obj.m_ua_object;
             m_ua_type = obj.m_ua_type;
-            m_status_code = obj.m_status_code;
             obj.m_ua_object = nullptr;
             obj.m_ua_type = 0;
-            obj.m_status_code = UA_STATUSCODE_GOOD;
         }
         return *this;
     }
@@ -102,28 +120,16 @@ public:
         return o_stream;
     }
 
-    /**
-     * @brief Set the status code of the internal object. (Optional)
-     *        If an OPC UA object is placed in a container in which it is necessary to comply with the rule for the sequence of objects (for example, a list of objects), a status code is returned,
-     *        even if the object was not read for some reason. In this case the object will be empty and will be returned
-     *        Fail-StatusCode, by which you can determine whether an object is valid or not and its status.
-     *        In the OPC UA standard, all attributes are returned according to the principle - they sent a list of NodeIDs, received back a list of attributes and a list of statuses in the same
-     *        sequence as they sent.
-     * https://reference.opcfoundation.org/Core/Part4/v104/docs/5.10.2
-     * @param status_code Integer value of the object's status code. Codes for standard 1.04 - http://www.opcfoundation.org/UA/schemas/StatusCode.csv
-     */
-    [[maybe_unused]] void SetStatusCode(UA_StatusCode status_code)
+    bool operator==(const UATypesContainer<UA_NodeId>& obj) const
     {
-        m_status_code = status_code;
+        static_assert(std::is_same_v<TOpen62541Type, UA_NodeId>);
+        return UA_NodeId_equal(m_ua_object, &obj.GetRef());
     }
 
-    /**
-     * @brief Get the status code of an internal object. (Optional)
-     * @return The integer value of the object's status code. Codes for standard 1.04 - http://www.opcfoundation.org/UA/schemas/StatusCode.csv
-     */
-    [[maybe_unused]] [[nodiscard]] UA_StatusCode GetStatusCode() const
+    bool operator==(const UATypesContainer<UA_ExpandedNodeId>& obj) const
     {
-        return m_status_code;
+        static_assert(std::is_same_v<TOpen62541Type, UA_ExpandedNodeId>);
+        return UA_ExpandedNodeId_equal(m_ua_object, &obj.GetRef());
     }
 
     /**
@@ -155,30 +161,96 @@ public:
 
     /**
      * @brief Output the object's contents as text. The content is encoded in JSON format.
+     * @param write_json_quote If it is true, then complex elements will be framed in quotation marks.
      * @return Contents as std::string
      */
     [[nodiscard]] std::string ToString() const
     {
-        UA_String out = UA_STRING_NULL;
-        if (UA_print(m_ua_object, &UA_TYPES[m_ua_type], &out) != UA_STATUSCODE_GOOD) // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+        std::unique_ptr<UA_String, void (*)(UA_String*)> out(UA_String_new(), UA_String_delete);
+        UA_String_init(out.get());
+        if (UA_print(m_ua_object, &UA_TYPES[m_ua_type], out.get()) != UA_STATUSCODE_GOOD) // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
         {
             return std::string{"ToString() error"};
         }
-
 #ifdef OPEN62541_UAPRINT_WITH_QUOTES
         // Since in the Open62541 library some JSON elements began to be framed in quotes, for compatibility
         // I will remove them if the definition is activated.
-        return std::string{static_cast<char*>(static_cast<void*>(out.data)), out.length}.substr(1, out.length - 2);
+        return std::string{static_cast<char*>(static_cast<void*>(out->data)), out->length}.substr(1, out->length - 2);
 #else
-        return std::string{static_cast<char*>(static_cast<void*>(out.data)), out.length};
+        return std::string{static_cast<char*>(static_cast<void*>(out->data)), out->length};
 #endif
+    }
+
+    /**
+     * @brief nodeid initialization method through xml notation 'ns=<namespaceIndex>;<identifiertype>=<identifier>'
+     * Example: 'ns=2;s=MyTemperature'
+     */
+    template <typename T = TOpen62541Type>
+    typename std::enable_if<std::is_same_v<T, UA_NodeId>>::type SetParamFromString(const std::string& node_id)
+    {
+        ClearNodeIDObject();
+        UA_NodeId_parse(m_ua_object, UA_STRING(const_cast<char*>(node_id.data()))); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+    }
+
+    /**
+     * @brief nodeid initialization method through XML Notation'ns=<namespaceIndex>;<identifiertype>=<identifier>'
+     * Example: 'ns=2;s=MyTemperature'
+     */
+    template <typename T = TOpen62541Type>
+    typename std::enable_if<std::is_same_v<T, UA_NodeId>>::type SetParamFromString(std::string&& node_id)
+    {
+        ClearNodeIDObject();
+        UA_NodeId_parse(m_ua_object, UA_STRING(node_id.data()));
+    }
+
+    /**
+     * @brief ExpandedNodeId object initialization method through XML Notation'ns=<namespaceIndex>;<identifiertype>=<identifier>'
+     * Example: 'ns=2;s=MyTemperature', 'nsu=http://test.org/UA/Data/;s=some.node.id'
+     */
+    template <typename T = TOpen62541Type>
+    typename std::enable_if<std::is_same_v<T, UA_ExpandedNodeId>>::type SetParamFromString(const std::string& exp_node_id)
+    {
+        ClearNodeIDObject();
+        UA_ExpandedNodeId_parse(m_ua_object, UA_STRING(const_cast<char*>(exp_node_id.data()))); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+    }
+
+    /**
+     * @brief ExpandedNodeId object initialization method through XML Notation 'ns=<namespaceIndex>;<identifiertype>=<identifier>'
+     * Example: 'ns=2;s=MyTemperature', 'nsu=http://test.org/UA/Data/;s=some.node.id'
+     */
+    template <typename T = TOpen62541Type>
+    typename std::enable_if<std::is_same_v<T, UA_ExpandedNodeId>>::type SetParamFromString(std::string&& exp_node_id)
+    {
+        ClearNodeIDObject();
+        UA_ExpandedNodeId_parse(m_ua_object, UA_STRING(exp_node_id.data()));
+    }
+
+private:
+    /**
+     * @brief The method cleansing internal objects of the library Open62541 with verification, such as NodeID, ExpandedNodeID.
+     */
+    void ClearNodeIDObject()
+    {
+        if constexpr (std::is_same_v<TOpen62541Type, UA_NodeId>)
+        {
+            if (!UA_NodeId_isNull(m_ua_object))
+            {
+                UA_clear(m_ua_object, &UA_TYPES[m_ua_type]);
+            }
+        }
+        if constexpr (std::is_same_v<TOpen62541Type, UA_ExpandedNodeId>)
+        {
+            if (!UA_NodeId_isNull(&m_ua_object->nodeId))
+            {
+                UA_clear(m_ua_object, &UA_TYPES[m_ua_type]);
+            }
+        }
     }
 
 private:
     u_int32_t m_ua_type;
-    // By default, all objects created inside the container will have a positive status code. Optionally, you can set the desired status code.
-    UA_StatusCode m_status_code = UA_STATUSCODE_GOOD;
     TOpen62541Type* m_ua_object;
+    bool m_is_weak_copy = false;
 };
 
 } // namespace nodesetexporter::open62541
@@ -205,6 +277,25 @@ struct less<UATypesContainer<TUA_Struct>>
     bool operator()(const UATypesContainer<UA_NodeId>& first, const UATypesContainer<UA_NodeId>& second) const
     {
         return (UA_NodeId_order(&first.GetRef(), &second.GetRef()) == UA_ORDER_LESS);
+    }
+};
+
+/**
+ * @brief Structure with methods for calculating the hash objects Open62541.
+ * The structure supports two types: UA_NodeId, UA_ExpandedNodeId.
+ */
+template <typename TUA_Struct>
+struct hash<UATypesContainer<TUA_Struct>>
+{
+    std::size_t operator()(const UATypesContainer<UA_ExpandedNodeId>& exp_nodeid) const
+    {
+
+        return UA_ExpandedNodeId_hash(&exp_nodeid.GetRef());
+    }
+
+    std::size_t operator()(const UATypesContainer<UA_NodeId>& nodeid) const
+    {
+        return UA_NodeId_hash(&nodeid.GetRef());
     }
 };
 } // namespace std

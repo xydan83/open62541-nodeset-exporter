@@ -20,7 +20,7 @@ namespace nodesetexporter::open62541
 
 using nodesetexporter::common::LogLevel;
 using LoggerBase = nodesetexporter::common::LoggerBase<std::string>;
-using nodesetexporter::common::statuses::StatusResults;
+using StatusResults = nodesetexporter::common::statuses::StatusResults<int64_t>;
 using nodesetexporter::interfaces::IOpen62541;
 using ::nodesetexporter::open62541::UATypesContainer;
 using nodesetexporter::open62541::typealiases::UAVariantToStdVariant;

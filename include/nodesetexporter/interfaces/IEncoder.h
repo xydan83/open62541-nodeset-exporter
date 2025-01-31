@@ -25,7 +25,7 @@ namespace nodesetexporter::interfaces
 
 using LoggerBase = nodesetexporter::common::LoggerBase<std::string>;
 using NodeIntermediateModel = ::nodesetexporter::open62541::NodeIntermediateModel;
-using StatusResults = ::nodesetexporter::common::statuses::StatusResults;
+using StatusResults = ::nodesetexporter::common::statuses::StatusResults<int64_t>;
 using ::nodesetexporter::open62541::UATypesContainer;
 
 /**

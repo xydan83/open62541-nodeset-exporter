@@ -23,15 +23,6 @@ using XMLEncoder = nodesetexporter::encoders::XMLEncoder;
 using ConsoleLogger = nodesetexporter::logger::ConsoleLogger;
 using PerformanceTimer = nodesetexporter::common::PerformanceTimer;
 
-/**
- * @brief Internal function for exporting a list of nodes with the required environment to a file or buffer with the specified encoding type.
- * @param open62541_objects Created object of type UA_Server or UA_Client, which will be used as a data source.
- * @param node_ids List of nodes to export.
- * @param filename Full path and name of the file where the upload will be generated.
- * @param out_buffer Output buffer where the upload will be generated instead of the file. When this parameter is specified, the file will not be generated.
- * @param opt Additional export mode options.
- * @return Function execution status.
- */
 template <typename TOpen62541ServerOrClient>
 StatusResults ExportNodeset(
     TOpen62541ServerOrClient& open62541_object,
@@ -63,6 +54,12 @@ StatusResults ExportNodeset(
         return StatusResults::Fail;
     }
 
+    if (node_ids.empty())
+    {
+        logger.value().get().Error("The list of node IDs is empty.");
+        return {StatusResults::Fail, StatusResults::SubStatus::EmptyNodeIdList};
+    }
+
     try
     {
         // I check that either the client or server type is passed to open62541_object, otherwise there is a static build error.
@@ -76,6 +73,10 @@ StatusResults ExportNodeset(
         else if constexpr (std::is_same_v<TOpen62541ServerOrClient, UA_Client>)
         {
             uniq_open625411_obj = std::make_unique<Open62541ClientWrapper>(open62541_object, logger.value().get());
+        }
+        else
+        {
+            static_assert("You need to choose between UA_Server or UA_Client....");
         }
 
         // Selects the exporter encoder implementation.
@@ -94,7 +95,15 @@ StatusResults ExportNodeset(
             }
         }
 
-        NodesetExporterLoop export_core(node_ids, *uniq_open625411_obj, *uniq_encoder, logger.value().get(), opt.parent_start_node_replacer, opt.is_perf_timer_enable);
+        NodesetExporterLoop export_core(
+            node_ids,
+            *uniq_open625411_obj,
+            *uniq_encoder,
+            logger.value().get(),
+            {opt.is_perf_timer_enable,
+             opt.ns0_custom_nodes_ready_to_work,
+             {opt.flat_list_of_nodes.is_enable, opt.flat_list_of_nodes.create_missing_start_node, opt.flat_list_of_nodes.allow_abstract_variable},
+             opt.parent_start_node_replacer});
         export_core.SetNumberOfMaxNodesToRequestData(opt.number_of_max_nodes_to_request_data);
 
         auto timer = PREPARE_TIMER(opt.is_perf_timer_enable);
@@ -110,24 +119,18 @@ StatusResults ExportNodeset(
     }
 }
 
-StatusResults DLL_PUBLIC ExportNodesetFromServer(
+template StatusResults DLL_PUBLIC ExportNodeset<UA_Server>(
     UA_Server& open62541_object,
     const std::map<std::string, std::vector<ExpandedNodeId>>& node_ids,
     std::string&& filename,
     std::optional<std::reference_wrapper<std::iostream>> out_buffer,
-    const Options& opt) noexcept
-{
-    return ExportNodeset(open62541_object, node_ids, std::move(filename), out_buffer, opt);
-}
+    const Options& opt) noexcept;
 
-StatusResults DLL_PUBLIC ExportNodesetFromClient(
+template StatusResults DLL_PUBLIC ExportNodeset<UA_Client>(
     UA_Client& open62541_object,
     const std::map<std::string, std::vector<ExpandedNodeId>>& node_ids,
     std::string&& filename,
     std::optional<std::reference_wrapper<std::iostream>> out_buffer,
-    const Options& opt) noexcept
-{
-    return ExportNodeset(open62541_object, node_ids, std::move(filename), out_buffer, opt);
-}
+    const Options& opt) noexcept;
 
 } // namespace nodesetexporter

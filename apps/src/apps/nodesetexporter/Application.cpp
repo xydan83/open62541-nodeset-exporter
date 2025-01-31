@@ -25,7 +25,6 @@ namespace prog_opt = boost::program_options;
 namespace build = build;
 namespace browseoperations = ::nodesetexporter::open62541::browseoperations;
 
-using EncoderTypes = ::nodesetexporter::common::EncoderTypes;
 using ::nodesetexporter::ExportNodesetFromClient;
 using ::nodesetexporter::common::PerformanceTimer;
 
@@ -173,9 +172,9 @@ void Application::StartExportInAnotherThread()
                     auto perf_timer = PerformanceTimer();
                     auto client_result = browseoperations::GrabChildNodeIdsFromStartNodeId(m_client, start_node_id, export_node_id_list);
                     m_logger_main.Info("Browsing operation from starting NodeID '{}': {}", start_node_id_s, PerformanceTimer::TimeToString(perf_timer.GetTimeElapsed()));
-                    if (!UA_StatusCode_isGood(client_result))
+                    if (client_result == StatusResults::Fail)
                     {
-                        throw std::runtime_error("Browsing error: " + std::string(UA_StatusCode_name(client_result)));
+                        throw std::runtime_error("Browsing error: " + std::string(UA_StatusCode_name(client_result.GetReserveCode())));
                     }
 
                     // If work is interrupted while browsing, I do not start the export and exit
@@ -279,15 +278,18 @@ int Application::Run()
         m_logger_main.Info("Installing a signal handler");
         SignalSet();
 
+        m_logger_main.Info("Configurating the Open62541 Client");
         m_client = UA_Client_new();
-        m_logger_main.Info("Configuration the Open62541 Client");
+        if (m_client == nullptr)
+        {
+            m_logger_main.Critical("Cannot create Open62541 client.");
+            return EXIT_FAILURE;
+        }
         auto* cli_config = UA_Client_getConfig(m_client);
-#ifdef OPEN62541_VER_1_3
+#ifdef OPEN62541_VER_1_4
+        cli_config->logging = &m_ua_logger;
+#elif defined(OPEN62541_VER_1_3)
         cli_config->logger = ::nodesetexporter::logger::Open62541LogPlugin::Open62541LoggerCreator(m_opc_ua_client_logger);
-#elif defined(OPEN62541_VER_1_4)
-        auto logging = ::nodesetexporter::logger::Open62541LogPlugin::Open62541LoggerCreator(m_opc_ua_client_logger);
-        cli_config->logging = &logging;
-        cli_config->eventLoop->logger = &logging;
 #endif
         UA_ClientConfig_setDefault(cli_config);
         cli_config->timeout = m_client_timeout;
@@ -335,9 +337,9 @@ int Application::Run()
             return EXIT_FAILURE;
         }
     }
-    catch (std::exception& e)
+    catch (std::exception& exc)
     {
-        m_logger_main.Critical("{}", e.what());
+        m_logger_main.Critical("An unexpected exception has occurred in the program: {}", exc.what());
         return EXIT_FAILURE;
     }
 

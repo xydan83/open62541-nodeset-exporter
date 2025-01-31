@@ -30,7 +30,7 @@
 namespace nodesetexporter::open62541::browseoperations
 {
 
-using nodesetexporter::common::statuses::StatusResults;
+using StatusResults = nodesetexporter::common::statuses::StatusResults<int64_t>;
 
 static std::vector<UATypesContainer<UA_ExpandedNodeId>> one_iteration_nodes; // Temporary Nodes for a Single Processing Iteration //NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 

@@ -11,6 +11,7 @@
 
 
 #include "include/nodesetexporter/NodesetExporter.h"
+#include "include/nodesetexporter/logger/LogPlugin.h"
 #include "include/nodesetexporter/logger/StdLog.h"
 #include "include/nodesetexporter/open62541/UATypesContainer.h"
 
@@ -26,8 +27,9 @@
 namespace apps::nodesetexporter
 {
 
-using StatusResults = ::nodesetexporter::StatusResults;
+using StatusResults = ::nodesetexporter::common::statuses::StatusResults<int64_t>;
 using ::nodesetexporter::open62541::UATypesContainer;
+using Open62541LogPlugin = ::nodesetexporter::logger::Open62541LogPlugin;
 
 class InterruptException : public std::runtime_error
 {
@@ -63,9 +65,10 @@ public:
         , m_signal_set(m_io_context)
         , m_opc_nodesetexporter_logger("logger nodesetexporter")
         , m_opc_ua_client_logger("opc-ua-client")
-        , m_client(nullptr)
+#ifdef OPEN62541_VER_1_4
+        , m_ua_logger(Open62541LogPlugin::Open62541LoggerCreator(m_opc_ua_client_logger))
+#endif
     {
-        m_logger_main.SetLevel(LogLevel::Info);
         m_opc_nodesetexporter_logger.SetLevel(LogLevel::Info);
         m_opc_ua_client_logger.SetLevel(LogLevel::Info);
     }
@@ -140,8 +143,11 @@ private:
     Logger m_logger_main;
     Logger m_opc_nodesetexporter_logger;
     Logger m_opc_ua_client_logger;
+#ifdef OPEN62541_VER_1_4
+    UA_Logger m_ua_logger;
+#endif
 
-    UA_Client* m_client;
+    UA_Client* m_client = nullptr;
 
     std::string m_client_endpointUrl{};
     std::vector<std::string> m_start_node_ids{};

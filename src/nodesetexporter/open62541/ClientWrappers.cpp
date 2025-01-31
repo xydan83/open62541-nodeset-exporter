@@ -44,12 +44,12 @@ StatusResults Open62541ClientWrapper::BrowseNext(UA_ByteString* const continuati
 
         if (UA_StatusCode_isBad(response.value.responseHeader.serviceResult))
         {
-            m_logger.Error("Browse Next has error from Open62541: {}", UA_StatusCode_name(response.value.responseHeader.serviceResult));
+            m_logger.Error("Browse Next has bad status '{}' in response.", UA_StatusCode_name(response.value.responseHeader.serviceResult));
             return StatusResults::Fail;
         }
         if (UA_StatusCode_isUncertain(response.value.responseHeader.serviceResult))
         {
-            m_logger.Warning("Browse Next has uncertain value from Open62541: {}", UA_StatusCode_name(response.value.responseHeader.serviceResult));
+            m_logger.Warning("Browse Next has uncertain status '{}' in response.", UA_StatusCode_name(response.value.responseHeader.serviceResult));
         }
 
         if (response.value.results == nullptr)
@@ -65,15 +65,14 @@ StatusResults Open62541ClientWrapper::BrowseNext(UA_ByteString* const continuati
         {
             if (UA_StatusCode_isBad(response.value.results[0].statusCode)) // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
             {
-                m_logger.Error(
-                    "UA_BrowseResult in Browse Next has error from Open62541: {}",
+                m_logger.Warning(
+                    "UA_BrowseResult has bad status '{}' in response.",
                     UA_StatusCode_name(response.value.results[0].statusCode)); // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-                return StatusResults::Fail;
             }
             if (UA_StatusCode_isUncertain(response.value.results[0].statusCode)) // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
             {
                 m_logger.Warning(
-                    "UA_BrowseResult in Browse Next has uncertain value from Open62541: {}",
+                    "UA_BrowseResult has uncertain status '{}' in response.",
                     UA_StatusCode_name(response.value.results[0].statusCode)); // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
             }
             // Processing the browsing result in parts
@@ -142,19 +141,26 @@ StatusResults Open62541ClientWrapper::ReadNodesAttributes(std::vector<UA_ReadVal
 StatusResults Open62541ClientWrapper::ReadNodeClasses(std::vector<NodeClassesRequestResponse>& node_class_structure_lists)
 {
     m_logger.Trace("Method called: ReadNodeClasses()");
-
-    std::vector<UA_ReadValueId> read_value_ids(node_class_structure_lists.size());
-    if (read_value_ids.size() != node_class_structure_lists.size())
-    {
-    }
+    std::unique_ptr<std::vector<UA_ReadValueId>, void (*)(std::vector<UA_ReadValueId>* const)> read_value_ids(
+        new std::vector<UA_ReadValueId>(node_class_structure_lists.size()),
+        [](std::vector<UA_ReadValueId>* const vec)
+        {
+            // Remove all the contents of UA_READVALUEID structures according to signs
+            for (auto& read_value_id : *vec)
+            {
+                UA_ReadValueId_clear(&read_value_id);
+            }
+            // Удаляю Vector вместе с содержимым UA_ReadValueId
+            delete vec; // NOLINT(cppcoreguidelines-owning-memory)
+        });
     for (size_t index = 0; index < node_class_structure_lists.size(); index++)
     {
-        UA_NodeId_copy(&node_class_structure_lists.at(index).exp_node_id.GetRef().nodeId, &read_value_ids.at(index).nodeId);
-        read_value_ids.at(index).attributeId = UA_ATTRIBUTEID_NODECLASS;
+        UA_NodeId_copy(&node_class_structure_lists.at(index).exp_node_id.GetRef().nodeId, &read_value_ids->at(index).nodeId);
+        read_value_ids->at(index).attributeId = UA_ATTRIBUTEID_NODECLASS;
     }
 
     return ReadNodesAttributes(
-        read_value_ids,
+        *read_value_ids,
         [&](size_t array_index, UA_DataValue& data_value, UA_NodeId& /*not_need*/, UA_UInt32 attr_id)
         {
             if (!UA_StatusCode_isBad(data_value.status) && data_value.hasValue) // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
@@ -174,6 +180,7 @@ StatusResults Open62541ClientWrapper::ReadNodeClasses(std::vector<NodeClassesReq
                     attr_id,
                     UA_StatusCode_name(data_value.status), // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
                     node_class_structure_lists.at(array_index).exp_node_id.ToString());
+                node_class_structure_lists.at(array_index).result_code = data_value.status;
             }
         });
 }
@@ -187,12 +194,19 @@ StatusResults Open62541ClientWrapper::ReadNodeReferences(std::vector<NodeReferen
     UA_BrowseRequest b_req; // The structure on the stack will be deleted upon exit, except for the structures at the pointer "UA_BrowseDescription *nodesToBrowse".
     UA_BrowseRequest_init(&b_req);
     // Creating nodesToBrowse structures
-    std::vector<UA_BrowseDescription> b_req_vector(node_references_structure_lists.size()); //<-- Owner (The Vector will delete the contents itself when the method exits)
-    if (node_references_structure_lists.size() != b_req_vector.size())
-    {
-        throw std::runtime_error("node_references_structure_lists.size() != b_req_vector.size()");
-    }
-    // Fill the contents of the created objects of the UA_BrowseDescription structures
+    std::unique_ptr<std::vector<UA_BrowseDescription>, void (*)(std::vector<UA_BrowseDescription>* const)> b_req_vector(
+        new std::vector<UA_BrowseDescription>(node_references_structure_lists.size()),
+        [](std::vector<UA_BrowseDescription>* const vec)
+        {
+            // Remove everything from the content of the structure of UA_BrowseDescription on the index
+            for (auto& read_value_id : *vec)
+            {
+                UA_BrowseDescription_clear(&read_value_id);
+            }
+            // Delete Vector along with the content of UA_BrowseDescription
+            delete vec; // NOLINT(cppcoreguidelines-owning-memory)
+        });
+    // заполню содержимое созданных объектов структур UA_BrowseDescription
     m_logger.Debug("--------------------------------------");
     m_logger.Debug("Prepare query parent NodeID[{}] --> references NodeIDs. Name of sent nodes:", node_references_structure_lists.size());
 
@@ -203,17 +217,17 @@ StatusResults Open62541ClientWrapper::ReadNodeReferences(std::vector<NodeReferen
         {
             m_logger.Debug("NodeID: '{}'", node_ref_request_response_struct.exp_node_id.ToString());
         }
-        b_req_vector.at(count).includeSubtypes = UA_TRUE;
-        b_req_vector.at(count).browseDirection = UA_BROWSEDIRECTION_BOTH;
-        b_req_vector.at(count).referenceTypeId = UA_NODEID_NUMERIC(0, UA_NS0ID_REFERENCES);
-        UA_NodeId_copy(&node_ref_request_response_struct.exp_node_id.GetRef().nodeId, &b_req_vector.at(count).nodeId);
-        b_req_vector.at(count).resultMask = UA_BROWSERESULTMASK_ALL;
+        b_req_vector->at(count).includeSubtypes = UA_TRUE;
+        b_req_vector->at(count).browseDirection = UA_BROWSEDIRECTION_BOTH;
+        b_req_vector->at(count).referenceTypeId = UA_NODEID_NUMERIC(0, UA_NS0ID_REFERENCES);
+        UA_NodeId_copy(&node_ref_request_response_struct.exp_node_id.GetRef().nodeId, &b_req_vector->at(count).nodeId);
+        b_req_vector->at(count).resultMask = UA_BROWSERESULTMASK_ALL;
         count++;
     }
     m_logger.Debug("--------------------------------------");
     // Assign a pointer to the first element of the array
-    b_req.nodesToBrowse = b_req_vector.data();
-    b_req.nodesToBrowseSize = b_req_vector.size();
+    b_req.nodesToBrowse = b_req_vector->data();
+    b_req.nodesToBrowseSize = b_req_vector->size();
     b_req.requestedMaxReferencesPerNode = m_requested_max_references_per_node;
 
     // Create a structure to ensure that UA_BrowseResponse is removed when exiting the processing function.
@@ -253,15 +267,17 @@ StatusResults Open62541ClientWrapper::ReadNodeReferences(std::vector<NodeReferen
             response.value.results[node_index].continuationPoint.length != 0); // NOLINT
         if (UA_StatusCode_isBad(response.value.results[node_index].statusCode)) // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         {
-            m_logger
-                .Error("UA_BrowseResult has error from Open62541: {}", UA_StatusCode_name(response.value.results[node_index].statusCode)); // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-            return StatusResults::Fail;
+            m_logger.Warning(
+                "UA_BrowseResult has bad status '{}' of node {} in response.",
+                UA_StatusCode_name(response.value.results[node_index].statusCode), // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+                node_references_structure_lists.at(node_index).exp_node_id.ToString());
         }
         if (UA_StatusCode_isUncertain(response.value.results[node_index].statusCode)) // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         {
             m_logger.Warning(
-                "UA_BrowseResult has uncertain value from Open62541: {}",
-                UA_StatusCode_name(response.value.results[node_index].statusCode)); // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+                "UA_BrowseResult has uncertain status '{}' of node {} in response.",
+                UA_StatusCode_name(response.value.results[node_index].statusCode), // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+                node_references_structure_lists.at(node_index).exp_node_id.ToString());
         }
 
         // continuationPoint
@@ -276,9 +292,10 @@ StatusResults Open62541ClientWrapper::ReadNodeReferences(std::vector<NodeReferen
         // Call BrowseNext. The condition prevents an unnecessary function call when everything has been read
         if (response.value.results[node_index].continuationPoint.length != 0) // NOLINT
         {
-            if (BrowseNext(&response.value.results[node_index].continuationPoint, node_references_structure_lists[node_index].references) // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+            if (BrowseNext(&response.value.results[node_index].continuationPoint, node_references_structure_lists.at(node_index).references) // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
                 == StatusResults::Fail)
             {
+                m_logger.Error("BrowseNext error with NodeID: {}", node_references_structure_lists.at(node_index).exp_node_id.ToString());
                 return StatusResults::Fail;
             }
         }
@@ -289,29 +306,39 @@ StatusResults Open62541ClientWrapper::ReadNodeReferences(std::vector<NodeReferen
 StatusResults Open62541ClientWrapper::ReadNodesAttributes(std::vector<NodeAttributesRequestResponse>& node_attr_structure_lists)
 {
     m_logger.Trace("Method called: ReadNodesAtrrubutes()");
-
-    std::vector<UA_ReadValueId> read_value_ids;
-    read_value_ids.reserve(node_attr_structure_lists.size());
+    std::unique_ptr<std::vector<UA_ReadValueId>, void (*)(std::vector<UA_ReadValueId>* const)> read_value_ids(
+        new std::vector<UA_ReadValueId>,
+        [](std::vector<UA_ReadValueId>* const vec)
+        {
+            // Delete all the contents of UA_READVALUEID structures by signs
+            for (auto& read_value_id : *vec)
+            {
+                UA_ReadValueId_clear(&read_value_id);
+            }
+            // Delete Vector along with the content of UA_READVALUEID
+            delete vec; // NOLINT(cppcoreguidelines-owning-memory)
+        });
+    read_value_ids->reserve(node_attr_structure_lists.size());
     size_t attr_index = 0;
     for (const auto& node_attr_structure_list : node_attr_structure_lists)
     {
         for (const auto& attr : node_attr_structure_list.attrs)
         {
-            read_value_ids.emplace_back();
-            UA_NodeId_copy(&node_attr_structure_list.exp_node_id.GetRef().nodeId, &read_value_ids.at(attr_index).nodeId);
-            read_value_ids.at(attr_index).attributeId = attr.first;
+            read_value_ids->emplace_back();
+            UA_NodeId_copy(&node_attr_structure_list.exp_node_id.GetRef().nodeId, &read_value_ids->at(attr_index).nodeId);
+            read_value_ids->at(attr_index).attributeId = attr.first;
             attr_index++;
         }
     }
-    size_t& flat_attr_numbers = attr_index;
-    if (read_value_ids.size() != flat_attr_numbers)
+    size_t const& flat_attr_numbers = attr_index;
+    if (read_value_ids->size() != flat_attr_numbers)
     {
         throw std::runtime_error("read_value_ids.size() != flat_attr_numbers");
     }
 
     std::vector<std::optional<VariantsOfAttr>> variants(flat_attr_numbers);
     StatusResults result = ReadNodesAttributes(
-        read_value_ids,
+        *read_value_ids,
         [&](size_t array_index, UA_DataValue& data_value, UA_NodeId& node_id, UA_UInt32 attr_id) // attr_index == array_index
         {
             if (!UA_StatusCode_isBad(data_value.status) && data_value.hasValue) // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)

@@ -23,7 +23,7 @@
 namespace nodesetexporter::interfaces
 {
 using LoggerBase = nodesetexporter::common::LoggerBase<std::string>;
-using StatusResults = ::nodesetexporter::common::statuses::StatusResults;
+using StatusResults = ::nodesetexporter::common::statuses::StatusResults<int64_t>;
 using ::nodesetexporter::open62541::UATypesContainer;
 using ::nodesetexporter::open62541::typealiases::VariantsOfAttr;
 
@@ -55,18 +55,25 @@ public:
      *          since exp_node_id does not store an object, and UATypesContainer will be created directly in the NodeClassesRequestResponse constructor and will be immediately deleted after
      *          the constructor works.
      *          For example: "NodeClassesRequestResponse{UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=500"), UA_TYPES_EXPANDEDNODEID)};" such a creation is not valid.
+     *
+     * result_code - Returned operation code for a specific node.
      */
     struct NodeClassesRequestResponse
     {
-        NodeClassesRequestResponse(const UATypesContainer<UA_ExpandedNodeId>& exp_node_id, UA_NodeClass node_cl = UA_NodeClass::UA_NODECLASS_UNSPECIFIED) // NOLINT(google-explicit-constructor)
+        NodeClassesRequestResponse( // NOLINT(google-explicit-constructor)
+            const UATypesContainer<UA_ExpandedNodeId>& exp_node_id,
+            UA_NodeClass node_cl = UA_NodeClass::UA_NODECLASS_UNSPECIFIED,
+            UA_StatusCode result_code = UA_STATUSCODE_GOOD)
             : exp_node_id(exp_node_id)
             , node_class(node_cl)
+            , result_code(result_code)
         {
         }
         // Request
         const UATypesContainer<UA_ExpandedNodeId>& exp_node_id;
         // Response [out]
         UA_NodeClass node_class;
+        UA_StatusCode result_code;
     };
 
     /**

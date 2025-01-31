@@ -10,12 +10,12 @@
 #define NODESETEXPORTER_COMMON_STRINGS_H
 
 #include <open62541/types.h>
+#include <open62541/types_generated_handling.h>
 
 #include <string>
 
 namespace nodesetexporter::common
 {
-
 /**
  * @brief Converter of strings of type UA_String of the Open62541 library to std::string
  */
@@ -23,6 +23,11 @@ namespace nodesetexporter::common
 {
     return std::string{static_cast<char*>(static_cast<void*>(some_string.data)), some_string.length};
 }
+
+/**
+ * @brief Function Eliminating the UANodeID facility identifier and a line returns.
+ */
+[[nodiscard]] std::string UaGuidIdentifierToStdString(const UA_NodeId& node_id);
 
 } // namespace nodesetexporter::common
 
