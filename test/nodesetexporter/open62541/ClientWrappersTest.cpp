@@ -7,7 +7,7 @@
 //
 
 #include "nodesetexporter/open62541/ClientWrappers.h"
-#include "nodesetexporter/common/LoggerBase.h"
+#include "LogMacro.h"
 #include "nodesetexporter/common/Statuses.h"
 #include "nodesetexporter/logger/LogPlugin.h"
 #include "nodesetexporter/open62541/UATypesContainer.h"
@@ -21,6 +21,7 @@
 
 #include <doctest/doctest.h>
 
+#include <condition_variable>
 #include <iostream>
 #include <set>
 #include <thread>
@@ -28,61 +29,41 @@
 
 namespace
 {
-using LogerBase = nodesetexporter::common::LoggerBase<std::string>;
+TEST_LOGGER_INIT
+
 using LoggerPlugin = nodesetexporter::logger::Open62541LogPlugin;
 using Open62541ClientWrapper = nodesetexporter::open62541::Open62541ClientWrapper;
-using nodesetexporter::common::statuses::StatusResults;
+using StatusResults = nodesetexporter::common::statuses::StatusResults<>;
 using NodeAttributesRequestResponse = nodesetexporter::interfaces::IOpen62541::NodeAttributesRequestResponse;
 using NodeClassesRequestResponse = nodesetexporter::interfaces::IOpen62541::NodeClassesRequestResponse;
 using NodeReferencesRequestResponse = nodesetexporter::interfaces::IOpen62541::NodeReferencesRequestResponse;
 using nodesetexporter::open62541::UATypesContainer;
 using nodesetexporter::open62541::typealiases::VariantsOfAttr;
 using nodesetexporter::open62541::typealiases::VariantsOfAttrToString;
+using namespace std::literals;
 
 
-std::atomic_bool running = true; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+constexpr auto SERVER_START_TIMEOUT = 10s;
+volatile std::atomic_bool running = true; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+std::condition_variable cv_server_started; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+std::mutex cv_mutex; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
-class Logger final : public LogerBase
-{
-public:
-    explicit Logger(std::string&& logger_name)
-        : LoggerBase<std::string>(std::move(logger_name))
-    {
-    }
-
-private:
-    void VTrace(std::string&& message) override
-    {
-        INFO(message);
-    }
-    void VDebug(std::string&& message) override
-    {
-        INFO(message);
-    }
-    void VInfo(std::string&& message) override
-    {
-        INFO(message);
-    }
-    void VWarning(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-    void VError(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-    void VCritical(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-};
 
 std::string UaStringToStdString(const UA_String& some_string)
 {
     return std::string{static_cast<char*>(static_cast<void*>(some_string.data)), some_string.length};
 }
 
-// Preparing a test server to which the client will connect
+// // Preparing a test server to which the client will connect
+// NOLINTBEGIN(cppcoreguidelines-macro-usage)
+#define CHECK_ERR(res)                                                                                                                                                                                 \
+    if (UA_StatusCode_isBad((res)))                                                                                                                                                                    \
+    {                                                                                                                                                                                                  \
+        MESSAGE("OPC Server has bad status code: ", UA_StatusCode_name((res)));                                                                                                                        \
+        REQUIRE(UA_StatusCode_isGood((res)));                                                                                                                                                          \
+    }
+// NOLINTEND(cppcoreguidelines-macro-usage)
+
 auto OpcUaServerStart()
 {
     return std::thread(
@@ -103,11 +84,27 @@ auto OpcUaServerStart()
             auto retval = UA_ServerConfig_setDefault(&config);
             REQUIRE_EQ(retval, UA_STATUSCODE_GOOD);
             auto* server = UA_Server_newWithConfig(&config);
-            MESSAGE(std::string(UA_StatusCode_name(retval)));
-            REQUIRE(UA_StatusCode_isGood(retval));
-            REQUIRE(UA_StatusCode_isGood(ex_nodeset(server))); // TEST NODESET LOADER (HARDCODE)
-            REQUIRE(UA_StatusCode_isGood(UA_Server_run(server, reinterpret_cast<volatile const bool*>(&running)))); // NOLINT
+            REQUIRE_NE(server, nullptr);
+            CHECK_ERR(ex_nodeset(server)); // TEST NODESET LOADER (HARDCODE)
+            uint64_t callback_id = 0;
+            CHECK_ERR(UA_Server_addTimedCallback(
+                server,
+                [](UA_Server* /*server*/, void*)
+                {
+                    std::lock_guard<std::mutex> locker(cv_mutex);
+                    cv_server_started.notify_all();
+                },
+                nullptr,
+                1000,
+                &callback_id));
+            CHECK_ERR(UA_Server_run(server, reinterpret_cast<volatile const bool*>(&running))); // NOLINT
+            UA_Server_removeRepeatedCallback(server, callback_id);
+
+#ifdef OPEN62541_VER_1_3
             UA_Server_delete(server);
+#elif defined(OPEN62541_VER_1_4)
+            CHECK_ERR(UA_Server_delete(server));
+#endif
             MESSAGE("Server down.");
         });
 }
@@ -168,12 +165,14 @@ void CheckAttrValueEqual(UA_AttributeId attr_id, const std::optional<VariantsOfA
             const UA_Variant value1 = std::get<UATypesContainer<UA_Variant>>(first.value()).GetRef();
             const UA_Variant value2 = std::get<UATypesContainer<UA_Variant>>(second.value()).GetRef();
             CHECK_EQ(value1.type->typeKind, value2.type->typeKind);
-            //            CHECK_EQ(UA_Variant_calcSizeBinary(&value1), UA_Variant_calcSizeBinary(&value2));
+            CHECK_EQ(UA_calcSizeBinary(&value1, &UA_TYPES[UA_TYPES_VARIANT]), UA_calcSizeBinary(&value2, &UA_TYPES[UA_TYPES_VARIANT]));
             UA_ByteString b_str1 = {0};
             UA_ByteString b_str2 = {0};
             UA_encodeBinary(&value1, &UA_TYPES[UA_TYPES_VARIANT], &b_str1);
             UA_encodeBinary(&value2, &UA_TYPES[UA_TYPES_VARIANT], &b_str2);
             CHECK(UA_ByteString_equal(&b_str1, &b_str2));
+            UA_ByteString_clear(&b_str1);
+            UA_ByteString_clear(&b_str2);
         }
         break;
         case UA_AttributeId::UA_ATTRIBUTEID_VALUERANK: // Int32
@@ -216,6 +215,8 @@ void CheckAttrValueEqual(UA_AttributeId attr_id, const std::optional<VariantsOfA
                     FAIL(true);
                 }
             }
+            UA_ByteString_clear(&b_str1);
+            UA_ByteString_clear(&b_str2);
         }
         break;
         default:
@@ -230,9 +231,13 @@ TEST_SUITE("nodesetexporter::open62541")
 {
     TEST_CASE("nodesetexporter::open62541::Open62541ClientWrapper") // NOLINT
     {
+        std::unique_lock<std::mutex> locker(cv_mutex);
         running = true;
         auto server_thread = OpcUaServerStart();
-        sleep(1);
+        const std::chrono::time_point<std::chrono::system_clock> server_start_timeout = std::chrono::system_clock::now() + SERVER_START_TIMEOUT;
+        REQUIRE_EQ(cv_server_started.wait_until(locker, server_start_timeout), std::cv_status::no_timeout); // I expect the start of the server
+        locker.unlock();
+
         auto* client = UA_Client_new();
         auto* cli_config = UA_Client_getConfig(client);
         Logger cli_logger("client-test");
@@ -483,7 +488,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 // Preparing the Query Array
                 node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node1));
                 // Query
-                CHECK_EQ(client_wrapper.ReadNodeReferences(node_references_structure_lists), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodeReferences(node_references_structure_lists).GetStatus(), StatusResults::Good);
                 // Reconciliation of results
                 size_t index = 0;
                 MESSAGE("parent node_id: ", test_node_references_structure_lists.at(0).exp_node_id.ToString());
@@ -505,7 +510,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node3));
                 node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node4));
                 // Query
-                CHECK_EQ(client_wrapper.ReadNodeReferences(node_references_structure_lists), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodeReferences(node_references_structure_lists).GetStatus(), StatusResults::Good);
                 // Reconciliation of results
                 size_t parent_node_id_index = 0;
                 for (const auto& test_parent_node_id : test_node_references_structure_lists)
@@ -533,7 +538,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node4));
                 // Query
                 client_wrapper.SetRequestedMaxReferencesPerNode(1);
-                CHECK_EQ(client_wrapper.ReadNodeReferences(node_references_structure_lists), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodeReferences(node_references_structure_lists).GetStatus(), StatusResults::Good);
                 // Reconciliation of results
                 size_t parent_node_id_index = 0;
                 for (const auto& test_parent_node_id : test_node_references_structure_lists)
@@ -564,7 +569,7 @@ TEST_SUITE("nodesetexporter::open62541")
                     // Query
                     client_wrapper.SetRequestedMaxReferencesPerNode(count_of_ref_per_node);
                     CHECK_EQ(client_wrapper.GetRequestedMaxReferencesPerNode(), count_of_ref_per_node);
-                    CHECK_EQ(client_wrapper.ReadNodeReferences(node_references_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodeReferences(node_references_structure_lists).GetStatus(), StatusResults::Good);
                     // Reconciliation of results
                     size_t parent_node_id_index = 0;
                     for (const auto& test_parent_node_id : test_node_references_structure_lists)
@@ -584,6 +589,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     node_references_structure_lists.clear();
                 }
             }
+            UA_ByteString_clear(&b_str1);
+            UA_ByteString_clear(&b_str2);
         }
 
         SUBCASE("ReadNodeClasses")
@@ -597,7 +604,7 @@ TEST_SUITE("nodesetexporter::open62541")
                     node_class_structure_lists.emplace_back(NodeClassesRequestResponse{node_test.second.node_id});
                 }
                 // Query
-                CHECK_EQ(client_wrapper.ReadNodeClasses(node_class_structure_lists), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodeClasses(node_class_structure_lists).GetStatus(), StatusResults::Good);
                 // Reconciliation of results
                 size_t index = 0;
                 for (const auto& node_test : test_nodes_attributes_data)
@@ -621,7 +628,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 node_class_structure_lists.emplace_back(NodeClassesRequestResponse(node3));
                 node_class_structure_lists.emplace_back(NodeClassesRequestResponse(node4));
                 // Query
-                CHECK_EQ(client_wrapper.ReadNodeClasses(node_class_structure_lists), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodeClasses(node_class_structure_lists).GetStatus(), StatusResults::Good);
                 // Reconciliation of results
                 for (const auto& node_class_rr : node_class_structure_lists)
                 {
@@ -637,7 +644,7 @@ TEST_SUITE("nodesetexporter::open62541")
             {
                 auto test_loca_data = test_read_node_data_val.at("UA_TYPES_STRING");
                 auto out = UATypesContainer<UA_Variant>(UA_TYPES_VARIANT);
-                CHECK_EQ(client_wrapper.ReadNodeDataValue(test_loca_data.node_id, out), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodeDataValue(test_loca_data.node_id, out).GetStatus(), StatusResults::Good);
                 CHECK_NE(out.GetRef().data, nullptr);
                 CHECK_EQ(out.GetRef().type, &UA_TYPES[test_loca_data.type_of_ua_variant_data]);
                 auto result = *static_cast<UA_String*>(out.GetRef().data);
@@ -649,7 +656,7 @@ TEST_SUITE("nodesetexporter::open62541")
             {
                 auto test_loca_data = test_read_node_data_val.at("UA_TYPES_DOUBLE");
                 auto out = UATypesContainer<UA_Variant>(UA_TYPES_VARIANT);
-                CHECK_EQ(client_wrapper.ReadNodeDataValue(test_loca_data.node_id, out), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodeDataValue(test_loca_data.node_id, out).GetStatus(), StatusResults::Good);
                 CHECK_EQ(out.GetRef().type, &UA_TYPES[test_loca_data.type_of_ua_variant_data]);
                 auto result = *static_cast<UA_Double*>(out.GetRef().data);
                 MESSAGE("RESULT DATA: ", result);
@@ -660,7 +667,7 @@ TEST_SUITE("nodesetexporter::open62541")
             {
                 auto test_loca_data = test_read_node_data_val.at("UA_TYPES_INT64");
                 auto out = UATypesContainer<UA_Variant>(UA_TYPES_VARIANT);
-                CHECK_EQ(client_wrapper.ReadNodeDataValue(test_loca_data.node_id, out), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodeDataValue(test_loca_data.node_id, out).GetStatus(), StatusResults::Good);
                 CHECK_EQ(out.GetRef().type, &UA_TYPES[test_loca_data.type_of_ua_variant_data]);
                 auto result = *static_cast<UA_Int64*>(out.GetRef().data);
                 MESSAGE("RESULT DATA: ", result);
@@ -671,7 +678,7 @@ TEST_SUITE("nodesetexporter::open62541")
             {
                 auto test_loca_data = test_read_node_data_val.at("NO_DATA");
                 auto out = UATypesContainer<UA_Variant>(UA_TYPES_VARIANT);
-                CHECK_EQ(client_wrapper.ReadNodeDataValue(test_loca_data.node_id, out), StatusResults::Fail);
+                CHECK_EQ(client_wrapper.ReadNodeDataValue(test_loca_data.node_id, out).GetStatus(), StatusResults::Fail);
             }
         }
 
@@ -687,7 +694,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_NODECLASS, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_NODECLASS).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_NODECLASS).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_NODECLASS, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_NODECLASS));
@@ -699,7 +706,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_BROWSENAME, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_BROWSENAME).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_BROWSENAME).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_BROWSENAME, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_BROWSENAME));
@@ -711,7 +718,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_DISPLAYNAME, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DISPLAYNAME).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DISPLAYNAME).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_DISPLAYNAME, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DISPLAYNAME));
@@ -723,7 +730,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_DESCRIPTION, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DESCRIPTION).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DESCRIPTION).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_DESCRIPTION, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DESCRIPTION));
@@ -735,7 +742,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_WRITEMASK, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_WRITEMASK).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_WRITEMASK).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_WRITEMASK, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_WRITEMASK));
@@ -747,7 +754,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_USERWRITEMASK, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USERWRITEMASK).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USERWRITEMASK).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_USERWRITEMASK, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USERWRITEMASK));
@@ -759,7 +766,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=21"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_ISABSTRACT, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ISABSTRACT).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ISABSTRACT).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_ISABSTRACT, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ISABSTRACT));
@@ -771,7 +778,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=28"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_SYMMETRIC, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_SYMMETRIC).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_SYMMETRIC).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_SYMMETRIC, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_SYMMETRIC));
@@ -783,7 +790,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=29"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_INVERSENAME, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_INVERSENAME).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_INVERSENAME).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_INVERSENAME, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_INVERSENAME));
@@ -794,7 +801,7 @@ TEST_SUITE("nodesetexporter::open62541")
                     // todo At the time of development, I did not find Viewe to check. I check for missing data.
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=29"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_CONTAINSNOLOOPS, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     CHECK_FALSE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_CONTAINSNOLOOPS).has_value());
                 }
 
@@ -804,7 +811,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_EVENTNOTIFIER, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EVENTNOTIFIER).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EVENTNOTIFIER).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_EVENTNOTIFIER, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EVENTNOTIFIER));
@@ -816,7 +823,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_VALUE, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_VALUE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE));
@@ -829,7 +836,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_DATATYPE, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DATATYPE).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DATATYPE).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_DATATYPE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DATATYPE));
@@ -842,7 +849,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=13"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_VALUERANK, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUERANK).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUERANK).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_VALUERANK, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUERANK));
@@ -855,7 +862,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=22"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_ARRAYDIMENSIONS, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ARRAYDIMENSIONS).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ARRAYDIMENSIONS).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_ARRAYDIMENSIONS, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ARRAYDIMENSIONS));
@@ -867,7 +874,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=3"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_ACCESSLEVEL, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ACCESSLEVEL).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ACCESSLEVEL).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_ACCESSLEVEL, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ACCESSLEVEL));
@@ -879,7 +886,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=3"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_USERACCESSLEVEL, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USERACCESSLEVEL).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USERACCESSLEVEL).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_USERACCESSLEVEL, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USERACCESSLEVEL));
@@ -891,7 +898,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=20"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL));
@@ -903,7 +910,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_HISTORIZING, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_HISTORIZING).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_HISTORIZING).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_HISTORIZING, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_HISTORIZING));
@@ -915,7 +922,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=12"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_EXECUTABLE, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EXECUTABLE).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EXECUTABLE).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_EXECUTABLE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EXECUTABLE));
@@ -927,7 +934,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=12"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_USEREXECUTABLE, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USEREXECUTABLE).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USEREXECUTABLE).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_USEREXECUTABLE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USEREXECUTABLE));
@@ -941,7 +948,7 @@ TEST_SUITE("nodesetexporter::open62541")
                     // Moreover, somehow it is in standard types, which seem to be generated by the same generator. (?)
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("i=376"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_DATATYPEDEFINITION, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DATATYPEDEFINITION).has_value());
                     VariantsOfAttr value;
                     CHECK_NOTHROW(value = node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DATATYPEDEFINITION).value()); // I take it out of std::options
@@ -958,7 +965,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID);
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_EXECUTABLE, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                     CHECK_FALSE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EXECUTABLE).has_value());
                     CheckAttrValueEqual(UA_ATTRIBUTEID_EXECUTABLE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EXECUTABLE));
                 }
@@ -971,7 +978,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 auto test_loca_data = test_nodes_attributes_data.at(UA_NODECLASS_VARIABLE);
                 node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({test_loca_data.node_id, test_loca_data.attrs_results}));
                 // Query
-                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                 // Reconciliation of results
                 for (const auto& test_attr : test_loca_data.attrs_results)
                 {
@@ -998,7 +1005,7 @@ TEST_SUITE("nodesetexporter::open62541")
                     node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_test.second.node_id, {{UA_ATTRIBUTEID_BROWSENAME, std::nullopt}}}));
                 }
                 // Query
-                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                 // Reconciliation of results
                 size_t index = 0;
                 for (const auto& node_test : test_nodes_attributes_data)
@@ -1032,8 +1039,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     node_attr_structure_lists.push_back(narr);
                 }
                 // Query
-                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
-                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
                 // Reconciliation of results
                 size_t index = 0;
                 for (const auto& node_test : test_nodes_attributes_data)
@@ -1065,5 +1072,6 @@ TEST_SUITE("nodesetexporter::open62541")
         {
             server_thread.join();
         }
+        sleep(1);
     }
 }

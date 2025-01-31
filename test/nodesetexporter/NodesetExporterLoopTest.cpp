@@ -6,10 +6,9 @@
 // Copyright 2024 (c) Aleksander Rozhkov <aleksprog@hotmail.com>
 //
 
-// todo Redesign the tests into a more understandable form. Remove the generators, form everything manually so that you can see what and where it comes from. Make tests of private methods, not just
-//  close-ups.
 
 #include "nodesetexporter/NodesetExporterLoop.h"
+#include "LogMacro.h"
 #include "nodesetexporter/open62541/UATypesContainer.h"
 
 #include <open62541/types.h>
@@ -27,47 +26,14 @@ using nodesetexporter::UATypesContainer;
 using nodesetexporter::VariantsOfAttr;
 using nodesetexporter::interfaces::IEncoder;
 using nodesetexporter::interfaces::IOpen62541;
-using StatusResults = ::nodesetexporter::common::statuses::StatusResults;
+using StatusResults = nodesetexporter::common::statuses::StatusResults<>;
 
 namespace
 {
+TEST_LOGGER_INIT
+
 using LoggerBase = nodesetexporter::common::LoggerBase<std::string>;
 using LogLevel = nodesetexporter::common::LogLevel;
-
-class Logger final : public LoggerBase
-{
-public:
-    explicit Logger(std::string&& logger_name)
-        : LoggerBase<std::string>(std::move(logger_name))
-    {
-    }
-
-private:
-    void VTrace(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-    void VDebug(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-    void VInfo(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-    void VWarning(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-    void VError(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-    void VCritical(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-};
 
 class MockEncoder : public trompeloeil::mock_interface<IEncoder>
 {
@@ -106,135 +72,6 @@ public:
     IMPLEMENT_MOCK1(ReadNodesAttributes);
     IMPLEMENT_MOCK2(ReadNodeDataValue);
 };
-
-/**
- * @brief Generator of positive, random numbers with setting a range
- * @param min Minimum Number
- * @param max Maximum number
- * @return Number type size_t
- */
-inline int64_t GetRandomNumber(int64_t min, int64_t max)
-{
-    std::random_device random; // Will be used to obtain a seed for the random number engine
-    std::mt19937 gen(random()); // Standard mersenne_twister_engine seeded with rd()
-    std::uniform_int_distribution<int64_t> distrib(min, max);
-    //    MESSAGE("RND: ", rnd);
-    return distrib(gen);
-}
-
-/**
- * @brief Generation of UATypesContainer<UA_ReferenceDescription> objects with random filling of most attributes but within reasonable values
- * @param type_id Initial node type (first should be UA_NS0ID_HIERARCHICALREFERENCES)
- * @param is_forward Reference type - forward or reverse (the first must be UA_FALSE)
- * @return UATypesContainer<UA_ReferenceDescription>
- */
-inline UATypesContainer<UA_ReferenceDescription> ReferenceDescriptionGen(UA_Int64& type_id, UA_Boolean& is_forward) // NOLINT
-{
-    constexpr size_t min = 1;
-    constexpr size_t max = 199;
-    std::string str_node_id;
-    auto str_ref_type_id = "i=" + std::to_string(type_id);
-    if (GetRandomNumber(0, 1) != 0)
-    {
-        str_node_id = "ns=2;i=" + std::to_string(GetRandomNumber(min, max));
-    }
-    else
-    {
-        str_node_id = "ns=2;s=Some node id" + std::to_string(GetRandomNumber(min, max));
-    }
-    auto str_type_def = "i=" + std::to_string(GetRandomNumber(UA_NS0ID_BOOLEAN, UA_NS0ID_IMAGE));
-
-    auto str_br_name = "Test browse name " + std::to_string(GetRandomNumber(min, UA_UINT32_MAX));
-    auto str_dspl_name = "Test display name " + std::to_string(GetRandomNumber(min, UA_UINT32_MAX));
-
-    UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-    CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt.GetRef().referenceTypeId, UA_String_fromChars(str_ref_type_id.c_str())), UA_STATUSCODE_GOOD);
-    CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt.GetRef().nodeId.nodeId, UA_String_fromChars(str_node_id.c_str())), UA_STATUSCODE_GOOD);
-    CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt.GetRef().typeDefinition.nodeId, UA_String_fromChars(str_type_def.c_str())), UA_STATUSCODE_GOOD);
-    ref_desc_cnt.GetRef().isForward = is_forward;
-    ref_desc_cnt.GetRef().browseName.namespaceIndex = 1;
-    ref_desc_cnt.GetRef().browseName.name = UA_String_fromChars(str_br_name.c_str());
-    ref_desc_cnt.GetRef().nodeClass = UA_NodeClass::UA_NODECLASS_REFERENCETYPE;
-    ref_desc_cnt.GetRef().displayName.locale = UA_String_fromChars("en");
-    ref_desc_cnt.GetRef().displayName.text = UA_String_fromChars(str_dspl_name.c_str());
-    is_forward = is_forward == UA_FALSE ? UA_TRUE : UA_FALSE; // NOLINT
-    type_id = GetRandomNumber(UA_NS0ID_REFERENCES, UA_NS0ID_HASHISTORICALCONFIGURATION);
-    return ref_desc_cnt;
-}
-
-/**
- * @brief Attribute generator by their ID.
- * @param attr_id attribute ID.
- * @return Attribute object.
- */
-inline VariantsOfAttr AttributesGen(UA_AttributeId attr_id)
-{
-    switch (attr_id)
-    {
-    case UA_ATTRIBUTEID_BROWSENAME:
-        return VariantsOfAttr{UATypesContainer<UA_QualifiedName>{UA_QUALIFIEDNAME_ALLOC(1, "Some Browsename"), UA_TYPES_QUALIFIEDNAME}};
-    case UA_ATTRIBUTEID_DISPLAYNAME:
-        return VariantsOfAttr{UATypesContainer<UA_LocalizedText>{UA_LOCALIZEDTEXT_ALLOC("en", "Some displayname"), UA_TYPES_LOCALIZEDTEXT}};
-    case UA_ATTRIBUTEID_DESCRIPTION:
-        return VariantsOfAttr{UATypesContainer<UA_LocalizedText>{UA_LOCALIZEDTEXT_ALLOC("en", "Some attribute description"), UA_TYPES_LOCALIZEDTEXT}};
-    case UA_ATTRIBUTEID_EVENTNOTIFIER:
-        return VariantsOfAttr{static_cast<UA_Byte>(UA_TRUE)};
-    case UA_ATTRIBUTEID_ISABSTRACT:
-        return VariantsOfAttr{static_cast<UA_Boolean>(UA_FALSE)};
-    case UA_ATTRIBUTEID_DATATYPE:
-        return VariantsOfAttr{UATypesContainer<UA_NodeId>{UA_NODEID_NUMERIC(0, GetRandomNumber(1, 64)), UA_TYPES_NODEID}}; // NOLINT
-    case UA_ATTRIBUTEID_VALUERANK:
-        return VariantsOfAttr{static_cast<UA_Int32>(GetRandomNumber(-3, 1))};
-    case UA_ATTRIBUTEID_ARRAYDIMENSIONS:
-        return VariantsOfAttr{std::vector<UA_UInt32>{
-            static_cast<UA_UInt32>(GetRandomNumber(UA_UINT32_MIN, UA_UINT32_MAX)),
-            static_cast<UA_UInt32>(GetRandomNumber(UA_UINT32_MIN, UA_UINT32_MAX)),
-            static_cast<UA_UInt32>(GetRandomNumber(UA_UINT32_MIN, UA_UINT32_MAX))}};
-    case UA_ATTRIBUTEID_VALUE:
-    {
-        auto test = UATypesContainer<UA_Variant>(UA_TYPES_VARIANT);
-        auto* some_scalar = UA_Int64_new();
-        *some_scalar = static_cast<UA_Int64>(GetRandomNumber(UA_INT64_MIN, UA_INT64_MAX));
-        UA_Variant_setScalar(&test.GetRef(), some_scalar, &UA_TYPES[UA_TYPES_INT64]);
-        return VariantsOfAttr{std::move(test)};
-    }
-    case UA_ATTRIBUTEID_ACCESSLEVEL:
-    case UA_ATTRIBUTEID_USERACCESSLEVEL:
-        return VariantsOfAttr{static_cast<UA_Byte>(GetRandomNumber(UA_ACCESSLEVELTYPE_NONE, UA_ACCESSLEVELTYPE_CURRENTWRITE))};
-    case UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL:
-        return VariantsOfAttr{static_cast<UA_Double>(GetRandomNumber(0, 10000))}; // NOLINT
-    case UA_ATTRIBUTEID_HISTORIZING:
-        return VariantsOfAttr{static_cast<UA_Boolean>(UA_FALSE)};
-    case UA_ATTRIBUTEID_INVERSENAME:
-        return VariantsOfAttr{UATypesContainer<UA_LocalizedText>{UA_LOCALIZEDTEXT_ALLOC("en", "Some inversename"), UA_TYPES_LOCALIZEDTEXT}};
-    case UA_ATTRIBUTEID_DATATYPEDEFINITION:
-    {
-        auto test = UATypesContainer<UA_Variant>(UA_TYPES_VARIANT);
-        // When the UATypesContainer is destroyed, the UA_Variant will be destroyed, which will destroy all objects (structures) inside...
-        if (GetRandomNumber(UA_TRUE, UA_FALSE) != 0U)
-        {
-            auto* str_def = UA_StructureDefinition_new(); // so I create it in the heap.
-            UA_StructureDefinition_init(str_def);
-            UA_Variant_setScalar(&test.GetRef(), str_def, &UA_TYPES[UA_TYPES_STRUCTUREDEFINITION]);
-        }
-        else
-        {
-            auto* enum_def = UA_EnumDefinition_new(); // so I create it in the heap.
-            UA_EnumDefinition_init(enum_def);
-            UA_Variant_setScalar(&test.GetRef(), enum_def, &UA_TYPES[UA_TYPES_ENUMDEFINITION]);
-        }
-        return VariantsOfAttr{test};
-    }
-    case UA_ATTRIBUTEID_WRITEMASK:
-    case UA_ATTRIBUTEID_USERWRITEMASK:
-        return VariantsOfAttr{static_cast<UA_UInt32>(GetRandomNumber(UA_UINT32_MIN, UA_UINT32_MAX))};
-    case UA_ATTRIBUTEID_SYMMETRIC:
-        return VariantsOfAttr{static_cast<UA_Boolean>(UA_FALSE)};
-    default:
-        FAIL(true, " AttributesGen - Non valid attr_id parameter");
-    }
-    return VariantsOfAttr{};
-}
 
 /**
  * @brief Method for comparing two lists with UA_ReferenceDescription in UATypesContainer containers.
@@ -318,20 +155,283 @@ inline void CheckRefferenceDescriptions(
         }
     }
 }
+
+// The structure of a complete description of the node without nodeid with additional assistance methods
+struct NodeDescription
+{
+    UA_NodeClass node_class = UA_NodeClass::__UA_NODECLASS_FORCE32BIT; // Класс узла
+
+    class Attributes // The attributes of the node
+    {
+    public:
+        enum class DefenitionTypes : u_int8_t
+        {
+            Enum,
+            Structure
+        };
+
+        void SetBrowseName(u_int16_t ns, std::string browse_name)
+        {
+            m_browse_name = UATypesContainer<UA_QualifiedName>{UA_QUALIFIEDNAME(ns, browse_name.data()), UA_TYPES_QUALIFIEDNAME};
+        }
+        void SetDisplayName(std::string locale, std::string display_name)
+        {
+            m_display_name = UATypesContainer<UA_LocalizedText>{UA_LOCALIZEDTEXT(locale.data(), display_name.data()), UA_TYPES_LOCALIZEDTEXT};
+        }
+        void SetDescription(std::string locale, std::string descr)
+        {
+            m_description = UATypesContainer<UA_LocalizedText>{UA_LOCALIZEDTEXT(locale.data(), descr.data()), UA_TYPES_LOCALIZEDTEXT};
+        }
+        void SetEventNotifier(uint8_t event)
+        {
+            m_eventnotifier = event;
+        }
+        void SetIsAbstract(bool is_abstr)
+        {
+            m_is_abstract = is_abstr;
+        }
+        void SetDataType(const std::string& node_id)
+        {
+            const auto node_id_tmp = UA_NODEID(node_id.data());
+            m_data_type = UATypesContainer<UA_NodeId>{node_id_tmp, UA_TYPES_NODEID};
+        }
+        void SetValueRank(int32_t val_rank)
+        {
+            m_value_rank = val_rank;
+        }
+        void SetArrayDimmension(std::vector<uint32_t>&& arr_dim)
+        {
+            m_array_dimension = std::move(arr_dim);
+        }
+        void SetValueScalar(int64_t value)
+        {
+            auto* some_scalar = UA_Int64_new();
+            *some_scalar = static_cast<UA_Int64>(value);
+            UA_Variant_setScalar(&scalar_value.GetRef(), some_scalar, &UA_TYPES[UA_TYPES_INT64]);
+        }
+
+        void SetValueScalar(std::string text)
+        {
+            auto some_text = UA_STRING_ALLOC(text.data());
+            UA_Variant_setScalarCopy(&scalar_value.GetRef(), &some_text, &UA_TYPES[UA_TYPES_STRING]);
+            UA_String_clear(&some_text);
+        }
+
+        void SetAccessLevel(uint8_t acc_level)
+        {
+            m_access_level = acc_level;
+        }
+        void SetUserAccessLevel(uint8_t user_access_level)
+        {
+            m_user_access_level = user_access_level;
+        }
+        void SetMinimumSamplingInterval(double minimum_sampling_interval)
+        {
+            m_minimum_sampling_interval = minimum_sampling_interval;
+        }
+        void SetHistorizing(bool histor)
+        {
+            m_historizing = histor;
+        }
+        void SetInverseName(std::string locale, std::string name)
+        {
+            m_inverse_name = UATypesContainer<UA_LocalizedText>{UA_LOCALIZEDTEXT(locale.data(), name.data()), UA_TYPES_LOCALIZEDTEXT};
+        }
+        void SetDataTypeDef(DefenitionTypes def_types, int64_t scalar)
+        {
+            switch (def_types)
+            {
+            case DefenitionTypes::Enum:
+            {
+                auto enum_def = UATypesContainer<UA_EnumDefinition>(UA_TYPES_ENUMDEFINITION);
+                enum_def.GetRef().fieldsSize = 1;
+                auto enum_f = UATypesContainer<UA_EnumField>(UA_TYPES_ENUMFIELD);
+                enum_def.GetRef().fields = &enum_f.GetRef();
+                UA_String name = UA_STRING_ALLOC("Test enum");
+                UA_String_copy(&name, &enum_def.GetRef().fields->name);
+                enum_def.GetRef().fields->value = scalar;
+                UA_Variant_setScalar(&scalar_value.GetRef(), &enum_def.GetRef(), &UA_TYPES[UA_TYPES_ENUMDEFINITION]);
+            }
+            break;
+            case DefenitionTypes::Structure:
+                auto str_def = UATypesContainer<UA_StructureDefinition>(UA_TYPES_STRUCTUREDEFINITION);
+                str_def.GetRef().structureType = UA_StructureType::UA_STRUCTURETYPE_STRUCTURE;
+                str_def.GetRef().fieldsSize = 1;
+                str_def.GetRef().baseDataType = UA_NODEID_NUMERIC(0, 8);
+                auto str_f = UATypesContainer<UA_StructureField>(UA_TYPES_STRUCTUREFIELD);
+                str_def.GetRef().fields = &str_f.GetRef();
+                UA_String name = UA_STRING_ALLOC("Test struct");
+                UA_String_copy(&name, &str_def.GetRef().fields->name);
+                UA_Variant_setScalar(&scalar_value.GetRef(), &str_def.GetRef(), &UA_TYPES[UA_TYPES_STRUCTUREDEFINITION]);
+                break;
+            }
+        }
+        void SetWriteMask(uint32_t write_mask)
+        {
+            m_write_mask = write_mask;
+        }
+        void SetUserWriteMask(UA_UInt32 user_write_mask)
+        {
+            m_user_write_mask = user_write_mask;
+        }
+        void SetSymmetric(bool symm)
+        {
+            m_symmetric = symm;
+        }
+
+        [[nodiscard]] VariantsOfAttr GetWrappAttr(UA_AttributeId attr_id) const
+        {
+            switch (attr_id)
+            {
+            case UA_ATTRIBUTEID_BROWSENAME:
+                return VariantsOfAttr{m_browse_name};
+            case UA_ATTRIBUTEID_DISPLAYNAME:
+                return VariantsOfAttr{m_display_name};
+            case UA_ATTRIBUTEID_DESCRIPTION:
+                return VariantsOfAttr{m_description};
+            case UA_ATTRIBUTEID_EVENTNOTIFIER:
+                return VariantsOfAttr{m_eventnotifier};
+            case UA_ATTRIBUTEID_ISABSTRACT:
+                return VariantsOfAttr{m_is_abstract};
+            case UA_ATTRIBUTEID_DATATYPE:
+                return VariantsOfAttr{m_data_type};
+            case UA_ATTRIBUTEID_VALUERANK:
+                return VariantsOfAttr{m_value_rank};
+            case UA_ATTRIBUTEID_ARRAYDIMENSIONS:
+                return VariantsOfAttr{m_array_dimension};
+            case UA_ATTRIBUTEID_VALUE:
+                return VariantsOfAttr{scalar_value};
+            case UA_ATTRIBUTEID_ACCESSLEVEL:
+                return VariantsOfAttr{m_access_level};
+            case UA_ATTRIBUTEID_USERACCESSLEVEL:
+                return VariantsOfAttr{m_user_access_level};
+            case UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL:
+                return VariantsOfAttr{m_minimum_sampling_interval};
+            case UA_ATTRIBUTEID_HISTORIZING:
+                return VariantsOfAttr{m_historizing};
+            case UA_ATTRIBUTEID_INVERSENAME:
+                return VariantsOfAttr{m_inverse_name};
+            case UA_ATTRIBUTEID_DATATYPEDEFINITION:
+                return VariantsOfAttr{data_type_definition};
+            case UA_ATTRIBUTEID_WRITEMASK:
+                return VariantsOfAttr{m_write_mask};
+            case UA_ATTRIBUTEID_USERWRITEMASK:
+                return VariantsOfAttr{m_user_write_mask};
+            case UA_ATTRIBUTEID_SYMMETRIC:
+                return VariantsOfAttr{m_symmetric};
+            }
+            FAIL(true);
+        }
+
+    private:
+        UATypesContainer<UA_QualifiedName> m_browse_name = UATypesContainer<UA_QualifiedName>(UA_TYPES_QUALIFIEDNAME);
+        UATypesContainer<UA_LocalizedText> m_display_name = UATypesContainer<UA_LocalizedText>(UA_TYPES_LOCALIZEDTEXT);
+        UATypesContainer<UA_LocalizedText> m_description = UATypesContainer<UA_LocalizedText>(UA_TYPES_LOCALIZEDTEXT);
+        UA_Byte m_eventnotifier = 0;
+        UA_Boolean m_is_abstract{};
+        UATypesContainer<UA_NodeId> m_data_type = UATypesContainer<UA_NodeId>(UA_TYPES_NODEID);
+        UA_Int32 m_value_rank = 0;
+        std::vector<UA_UInt32> m_array_dimension;
+        UATypesContainer<UA_Variant> scalar_value = UATypesContainer<UA_Variant>(UA_TYPES_VARIANT);
+        UA_Byte m_access_level = 0;
+        UA_Byte m_user_access_level = 0;
+        UA_Double m_minimum_sampling_interval = 0;
+        UA_Boolean m_historizing{};
+        UATypesContainer<UA_LocalizedText> m_inverse_name = UATypesContainer<UA_LocalizedText>(UA_TYPES_LOCALIZEDTEXT);
+        UATypesContainer<UA_Variant> data_type_definition = UATypesContainer<UA_Variant>(UA_TYPES_VARIANT);
+        UA_UInt32 m_write_mask = 0;
+        UA_UInt32 m_user_write_mask = 0;
+        UA_Boolean m_symmetric = false;
+    } attributes;
+
+    class References
+    {
+    public:
+        void SetReferenceTypeId(const std::string& node_id)
+        {
+            const auto node_id_tmp = UA_NODEID(node_id.data());
+            UA_NodeId_copy(&node_id_tmp, &m_reference.GetRef().referenceTypeId);
+        }
+        void SetIsForward(bool is_forward)
+        {
+            m_reference.GetRef().isForward = is_forward;
+        }
+        void SetNodeId(const std::string& node_id)
+        {
+            const auto node_id_tmp = UA_EXPANDEDNODEID(node_id.data());
+            UA_ExpandedNodeId_copy(&node_id_tmp, &m_reference.GetRef().nodeId);
+        }
+        void SetBrowseName(u_int16_t ns, std::string browse_name)
+        {
+            const auto br_name = UA_QUALIFIEDNAME(ns, browse_name.data());
+            UA_QualifiedName_copy(&br_name, &m_reference.GetRef().browseName);
+        }
+        void SetDisplayName(std::string locale, std::string display_name)
+        {
+            const auto disp_name = UA_LOCALIZEDTEXT(locale.data(), display_name.data());
+            UA_LocalizedText_copy(&disp_name, &m_reference.GetRef().displayName);
+        }
+        void SetNodeClass(UA_NodeClass nd_class)
+        {
+            m_reference.GetRef().nodeClass = nd_class;
+        }
+        void SetTypeDefinition(const std::string& node_id)
+        {
+            const auto node_id_tmp = UA_EXPANDEDNODEID(node_id.data());
+            UA_ExpandedNodeId_copy(&node_id_tmp, &m_reference.GetRef().typeDefinition);
+        }
+
+        /**
+         * @brief Метод добавления ссылки в массив. Кажды раз при заполнении ссылки необходимо в конце вызвать данный метод.
+         * @param is_this_ref_will_be_delete - В случае, если предполагается, что ядро должно удалить ссылку - нужно ее пометить как true.
+         */
+        void AddReferenceToVector(bool is_this_ref_will_be_delete = false)
+        {
+            m_references.push_back(std::move(m_reference));
+            m_reference = UATypesContainer<UA_ReferenceDescription>(UA_TYPES_REFERENCEDESCRIPTION);
+            m_list_is_this_refs_will_be_delete.push_back(is_this_ref_will_be_delete);
+        };
+
+        void SetReferences(std::vector<UATypesContainer<UA_ReferenceDescription>>&& ref)
+        {
+            m_references = std::move(ref);
+        }
+
+        [[nodiscard]] std::vector<UATypesContainer<UA_ReferenceDescription>> GetReferences() const
+        {
+            return m_references;
+        }
+
+        [[nodiscard]] std::vector<bool> GetListOfUsageRef() const
+        {
+            return m_list_is_this_refs_will_be_delete;
+        }
+
+    private:
+        UATypesContainer<UA_ReferenceDescription> m_reference = UATypesContainer<UA_ReferenceDescription>(UA_TYPES_REFERENCEDESCRIPTION); // Ссылки узла
+        std::vector<UATypesContainer<UA_ReferenceDescription>> m_references;
+        std::vector<bool> m_list_is_this_refs_will_be_delete;
+    } references;
+};
+
 } // namespace
 
 
 TEST_SUITE("nodesetexporter")
 {
-    const auto number_of_nodes = GetRandomNumber(80, 199); // NUMBER OF NODES
-    const auto max_nodes_to_request_data = GetRandomNumber(1, number_of_nodes - 1); // Number of nodes in a kernel test package with a limit on a single data request
     const auto parent_start_node_replacer = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER), UA_TYPES_EXPANDEDNODEID);
+    const auto max_nodes_to_request_data = 5; // The number of nodes in the package for the core test indicating the limit for a single data request
 
+    // Classes / text names.
     const std::map<std::uint32_t, std::string> types_nodeclasses{
-        {UA_NODECLASS_OBJECTTYPE, "UA_NODECLASS_OBJECTTYPE"},
+        {UA_NODECLASS_OBJECT, "UA_NODECLASS_OBJECT"},
+        {UA_NODECLASS_VARIABLE, "UA_NODECLASS_VARIABLE"},
+        {UA_NODECLASS_METHOD, "UA_NODECLASS_METHOD"},
+        {UA_NODECLASS_OBJECTTYPE, "UA_NODECLASS_DATATYPE"},
+        {UA_NODECLASS_VARIABLETYPE, "UA_NODECLASS_VARIABLETYPE"},
         {UA_NODECLASS_REFERENCETYPE, "UA_NODECLASS_REFERENCETYPE"},
         {UA_NODECLASS_DATATYPE, "UA_NODECLASS_DATATYPE"},
-        {UA_NODECLASS_VARIABLETYPE, "UA_NODECLASS_VARIABLETYPE"}};
+        {UA_NODECLASS_VIEW, "UA_NODECLASS_VIEW"}};
 
     TEST_CASE("nodesetexporter::NodesetExporterLoop") // NOLINT
     {
@@ -339,13 +439,14 @@ TEST_SUITE("nodesetexporter")
         using trompeloeil::eq;
         using trompeloeil::ne;
         trompeloeil::sequence seq;
-        u_int32_t number_of_valid_class_nodes_to_export = 0;
-        u_int32_t number_of_add_nodes_to_export = 0;
+        size_t number_of_valid_class_nodes_to_export = 0;
+        size_t number_of_add_nodes_to_export = 0;
 
         auto exp_nodeid_null = UA_EXPANDEDNODEID_NULL;
 
         constexpr size_t namespace_array_size = 3;
 
+        // Set namespace
         UATypesContainer<UA_ExpandedNodeId> server_namespace_array_request(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_SERVER_NAMESPACEARRAY), UA_TYPES_EXPANDEDNODEID);
         std::vector<std::string> valid_namespaces{"http://some_opc_server/UA/", "http://some_devices/UA/"};
         auto* namespace_array = static_cast<UA_String*>(UA_Array_new(namespace_array_size, &UA_TYPES[UA_TYPES_STRING]));
@@ -354,89 +455,719 @@ TEST_SUITE("nodesetexporter")
         namespace_array[2] = UA_String_fromChars(valid_namespaces[1].c_str()); // NOLINT
 
         // Prepare test nodes
-        std::vector<UATypesContainer<UA_ExpandedNodeId>> nodes_id; // They are passed to the input of the kernel.
-        std::map<UATypesContainer<UA_ExpandedNodeId>, UA_NodeClass> nodes_with_class; // Used to populate node classes in MOCK methods of the Open62541 interface.
+        std::vector<UATypesContainer<UA_ExpandedNodeId>> nodes_ids; // They are passed to the input of the kernel.
+        std::map<UATypesContainer<UA_ExpandedNodeId>, NodeDescription> nodes_description; // Used to describe node classes in MOCK methods of the Open62541 interface.
+        std::map<UATypesContainer<UA_ExpandedNodeId>, NodeDescription>
+            cmp_ref_descr; // The output test comparative model of the structure of the nodes, taking into account all the changes made by the core.
         std::set<UATypesContainer<UA_ExpandedNodeId>> valid_node_id; // Valid node_ids for operation are used to filter test references.
-        size_t power = 0;
-        for (size_t index = 0; index < number_of_nodes; index++)
-        {
-            UA_ExpandedNodeId ua_node_id = UA_EXPANDEDNODEID_NULL;
-            std::string node_id_txt;
-            if (GetRandomNumber(0, 1) != 0)
-            {
-                node_id_txt = "ns=2;i=" + std::to_string(index + 1);
-            }
-            else
-            {
-                node_id_txt = "ns=2;s=Some node id" + std::to_string(index + 1);
-            }
 
-            CHECK_EQ(UA_NodeId_parse(&ua_node_id.nodeId, UA_String_fromChars(node_id_txt.c_str())), UA_STATUSCODE_GOOD);
-            nodes_id.emplace_back(ua_node_id, UA_TYPES_EXPANDEDNODEID);
-            // Assign classes to nodes randomly
-            auto node_class = static_cast<UA_NodeClass>(std::pow(2, power));
-            nodes_with_class.try_emplace(UATypesContainer<UA_ExpandedNodeId>(ua_node_id, UA_TYPES_EXPANDEDNODEID), node_class);
-            if (node_class == UA_NODECLASS_OBJECT || node_class == UA_NODECLASS_VARIABLE || node_class == UA_NODECLASS_OBJECTTYPE || node_class == UA_NODECLASS_VARIABLETYPE
-                || node_class == UA_NODECLASS_REFERENCETYPE || node_class == UA_NODECLASS_DATATYPE)
+        // Adding nodes
+        // NODE ns=2;i=100 - Root node tied to Objects
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_NUMERIC(2, 100), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        auto node_desc = std::make_unique<NodeDescription>();
+        node_desc->node_class = UA_NODECLASS_OBJECT;
+        node_desc->attributes.SetBrowseName(1, "vPLC1");
+        node_desc->attributes.SetDisplayName("en", "vPLC1");
+        node_desc->attributes.SetDescription("en", "Description vPLC1");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=61");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=40");
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECTTYPE);
+        node_desc->references.SetDisplayName("en", "FolderType");
+        node_desc->references.SetBrowseName(0, "FolderType");
+        node_desc->references.AddReferenceToVector();
+        // Ref2 - Reverse reference
+        node_desc->references.SetNodeId("i=85");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=35");
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECT);
+        node_desc->references.SetDisplayName("en", "Objects");
+        node_desc->references.SetBrowseName(0, "Objects");
+        node_desc->references.AddReferenceToVector();
+        // Ref 3 - Forward reference
+        node_desc->references.SetNodeId("ns=2;i=200");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "temperature");
+        node_desc->references.SetBrowseName(0, "temperature");
+        node_desc->references.AddReferenceToVector();
+        // Ref 4 - Forward reference
+        node_desc->references.SetNodeId("ns=2;s=vPLC1.Test_node_2");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "vPLC1.Test_node_2");
+        node_desc->references.SetBrowseName(0, "vPLC1.Test_node_2");
+        node_desc->references.AddReferenceToVector();
+        // Ref 5 - Forward reference to the ignored type of View, respectively, will be removed by the core
+        node_desc->references.SetNodeId("ns=2;g=879317f1-992b-4d94-841d-bc7510b3922d");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VIEW);
+        node_desc->references.SetDisplayName("en", "View test");
+        node_desc->references.SetBrowseName(0, "View test");
+        node_desc->references.AddReferenceToVector(true);
+        // Ref 6 - Forward reference
+// todo In some of early version 1.3.x library has a problem with bytestring.
+//  Need to find this version, but now - just change node type if we use 1.3.x.
+#ifdef OPEN62541_VER_1_4
+        node_desc->references.SetNodeId("ns=4;b=ByteStringNode");
+#elif defined(OPEN62541_VER_1_3)
+        node_desc->references.SetNodeId("ns=4;s=ByteStringNode");
+#endif
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "byte string");
+        node_desc->references.SetBrowseName(0, "byte string");
+        node_desc->references.AddReferenceToVector();
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // NODE ns=4;b=ByteStringNode= - A variable node tied to the node of the object (root)
+        node_desc = std::make_unique<NodeDescription>();
+#ifdef OPEN62541_VER_1_4
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_BYTESTRING(4, "ByteStringNode"), UA_TYPES_EXPANDEDNODEID);
+#elif defined(OPEN62541_VER_1_3)
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING(4, "ByteStringNode"), UA_TYPES_EXPANDEDNODEID);
+#endif
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_VARIABLE;
+        node_desc->attributes.SetBrowseName(1, "byte string");
+        node_desc->attributes.SetDisplayName("en", "byte string");
+        node_desc->attributes.SetDescription("en", "Description byte string");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetDataType("i=11");
+        node_desc->attributes.SetValueScalar(133);
+        node_desc->attributes.SetValueRank(UA_VALUERANK_SCALAR);
+        node_desc->attributes.SetArrayDimmension(std::vector<uint32_t>());
+        node_desc->attributes.SetMinimumSamplingInterval(100);
+        node_desc->attributes.SetHistorizing(false);
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=63");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=40");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLETYPE);
+        node_desc->references.SetDisplayName("en", "BaseDataVariableType");
+        node_desc->references.SetBrowseName(0, "BaseDataVariableType");
+        node_desc->references.AddReferenceToVector();
+        // Ref2 - Reverse reference
+        node_desc->references.SetNodeId("ns=2;i=100");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECT);
+        node_desc->references.SetDisplayName("en", "vPLC1");
+        node_desc->references.SetBrowseName(0, "vPLC1");
+        node_desc->references.AddReferenceToVector();
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // NODE ns=2;i=200 - A variable node tied to the node of the object (root)
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_NUMERIC(2, 200), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_VARIABLE;
+        node_desc->attributes.SetBrowseName(1, "temperature");
+        node_desc->attributes.SetDisplayName("en", "temperature");
+        node_desc->attributes.SetDescription("en", "Description temperature");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetDataType("i=11");
+        node_desc->attributes.SetValueScalar(133);
+        node_desc->attributes.SetValueRank(UA_VALUERANK_SCALAR);
+        node_desc->attributes.SetArrayDimmension(std::vector<uint32_t>());
+        node_desc->attributes.SetMinimumSamplingInterval(100);
+        node_desc->attributes.SetHistorizing(false);
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=63");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=40");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLETYPE);
+        node_desc->references.SetDisplayName("en", "BaseDataVariableType");
+        node_desc->references.SetBrowseName(0, "BaseDataVariableType");
+        node_desc->references.AddReferenceToVector();
+        // Ref2 - Reverse reference
+        node_desc->references.SetNodeId("ns=2;i=100");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECT);
+        node_desc->references.SetDisplayName("en", "vPLC1");
+        node_desc->references.SetBrowseName(0, "vPLC1");
+        node_desc->references.AddReferenceToVector();
+        // Ref3 - Forward reference
+        node_desc->references.SetNodeId("ns=2;s=vPLC1.Test_node_2");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "Test node 2");
+        node_desc->references.SetBrowseName(0, "Test node 2");
+        node_desc->references.AddReferenceToVector();
+        // Ref4 Forward reference on the ignored type method
+        node_desc->references.SetNodeId("ns=3;i=300");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_METHOD);
+        node_desc->references.SetDisplayName("en", "method");
+        node_desc->references.SetBrowseName(0, "method");
+        node_desc->references.AddReferenceToVector(true);
+        // Ref5 - Forward reference
+        node_desc->references.SetNodeId("ns=5;i=1299");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "pressure");
+        node_desc->references.SetBrowseName(0, "pressure");
+        node_desc->references.AddReferenceToVector();
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // NODE ns=3;i=300 --- Ignored node method
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_NUMERIC(3, 300), UA_TYPES_EXPANDEDNODEID);
+        node_desc->node_class = UA_NODECLASS_METHOD;
+        node_desc->attributes.SetBrowseName(1, "method");
+        node_desc->attributes.SetDisplayName("en", "method");
+        node_desc->attributes.SetDescription("en", "Description method");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        // Ref1 - Reverse reference
+        node_desc->references.SetNodeId("ns=2;i=200");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "temperature");
+        node_desc->references.SetBrowseName(0, "temperature");
+        node_desc->references.AddReferenceToVector(true);
+        // Ref2 - Forward reference
+        node_desc->references.SetNodeId("ns=2;s=Test node 1");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "Test node 1");
+        node_desc->references.SetBrowseName(0, "Test node 1");
+        node_desc->references.AddReferenceToVector(true);
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // NODE ns=5;i=1299 - The node is tied to another node - variable
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_NUMERIC(5, 1299), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_VARIABLE;
+        node_desc->attributes.SetBrowseName(1, "pressure");
+        node_desc->attributes.SetDisplayName("en", "pressure");
+        node_desc->attributes.SetDescription("en", "Description pressure");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetDataType("i=11");
+        node_desc->attributes.SetValueScalar(133);
+        node_desc->attributes.SetValueRank(UA_VALUERANK_SCALAR);
+        node_desc->attributes.SetArrayDimmension(std::vector<uint32_t>());
+        node_desc->attributes.SetMinimumSamplingInterval(5999);
+        node_desc->attributes.SetHistorizing(true);
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=63");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=40");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLETYPE);
+        node_desc->references.SetDisplayName("en", "BaseDataVariableType");
+        node_desc->references.SetBrowseName(0, "BaseDataVariableType");
+        node_desc->references.AddReferenceToVector();
+        // Ref2 - Reverse reference
+        node_desc->references.SetNodeId("ns=2;i=200");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "temperature");
+        node_desc->references.SetBrowseName(0, "temperature");
+        node_desc->references.AddReferenceToVector();
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // NODE ns=2;s=Test node 1 - The node tied to Method - should also be ignored
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING(2, "Test_node_1"), UA_TYPES_EXPANDEDNODEID);
+        node_desc->node_class = UA_NODECLASS_VARIABLE;
+        node_desc->attributes.SetBrowseName(1, "Test node 1");
+        node_desc->attributes.SetDisplayName("en", "Test node 1");
+        node_desc->attributes.SetDescription("en", "Description Test node 1");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetDataType("i=12");
+        node_desc->attributes.SetValueScalar("Test message");
+        node_desc->attributes.SetValueRank(UA_VALUERANK_SCALAR);
+        node_desc->attributes.SetArrayDimmension(std::vector<uint32_t>());
+        node_desc->attributes.SetMinimumSamplingInterval(100);
+        node_desc->attributes.SetHistorizing(false);
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=63");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=40");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLETYPE);
+        node_desc->references.SetDisplayName("en", "BaseDataVariableType");
+        node_desc->references.SetBrowseName(0, "BaseDataVariableType");
+        node_desc->references.AddReferenceToVector(true);
+        // Ref2 - Reverse reference
+        node_desc->references.SetNodeId("ns=3;i=300");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_METHOD);
+        node_desc->references.SetDisplayName("en", "method");
+        node_desc->references.SetBrowseName(0, "method");
+        node_desc->references.AddReferenceToVector(true);
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // NODE ns=2;s=vPLC1.Test_node_2 - The node refers to 2 parental nodes, and the first will be the main
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2"), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_VARIABLE;
+        node_desc->attributes.SetBrowseName(1, "Test node 2");
+        node_desc->attributes.SetDisplayName("en", "Test node 2");
+        node_desc->attributes.SetDescription("en", "Description Test node 2");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetDataType("i=12");
+        node_desc->attributes.SetValueScalar("Test node 2 text");
+        node_desc->attributes.SetValueRank(UA_VALUERANK_SCALAR);
+        node_desc->attributes.SetArrayDimmension(std::vector<uint32_t>());
+        node_desc->attributes.SetMinimumSamplingInterval(200);
+        node_desc->attributes.SetHistorizing(false);
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=63");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=40");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLETYPE);
+        node_desc->references.SetDisplayName("en", "BaseDataVariableType");
+        node_desc->references.SetBrowseName(0, "BaseDataVariableType");
+        node_desc->references.AddReferenceToVector();
+        // Ref2 - Reverse reference
+        node_desc->references.SetNodeId("ns=2;i=100");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECT);
+        node_desc->references.SetDisplayName("en", "vPLC1");
+        node_desc->references.SetBrowseName(0, "vPLC1");
+        node_desc->references.AddReferenceToVector();
+        // Ref3 - Reverse reference
+        node_desc->references.SetNodeId("ns=2;i=200");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "temperature");
+        node_desc->references.SetBrowseName(0, "temperature");
+        node_desc->references.AddReferenceToVector();
+        // Ref 4 - Forward reference
+        node_desc->references.SetNodeId("ns=2;s=vPLC1.Test_node_2.BrowsePathTest");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "vPLC1.Test_node_2._Statistics");
+        node_desc->references.SetBrowseName(0, "vPLC1.Test_node_2._Statistics");
+        node_desc->references.AddReferenceToVector();
+        // Ref 5 - Forward reference
+        node_desc->references.SetNodeId("ns=2;s=vPLC1.Test_node_2._Statistics");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECT);
+        node_desc->references.SetDisplayName("en", "vPLC1.Test_node_2._Statistics");
+        node_desc->references.SetBrowseName(0, "vPLC1.Test_node_2._Statistics");
+        node_desc->references.AddReferenceToVector(true);
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // NODE ns=5;s=Тестовый_узел_5 - Node type Datatype
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING(5, "Тестовый_узел_5"), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_DATATYPE;
+        node_desc->attributes.SetBrowseName(1, "Union");
+        node_desc->attributes.SetDisplayName("en", "Union");
+        node_desc->attributes.SetDescription("en", "Description Union");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetIsAbstract(true);
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=22");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=45");
+        node_desc->references.SetNodeClass(UA_NODECLASS_DATATYPE);
+        node_desc->references.SetDisplayName("en", "Structure");
+        node_desc->references.SetBrowseName(0, "Structure");
+        node_desc->references.AddReferenceToVector();
+        // Ref2 - Reverse reference - In the types, it will have to be removed by the nucleus.
+        node_desc->references.SetNodeId("ns=2;i=200");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "temperature");
+        node_desc->references.SetBrowseName(0, "temperature");
+        node_desc->references.AddReferenceToVector(true);
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // NODE ns=2;g=d8597619-5361-47c3-b81f-26b46a5b47fb - ReferenceType type node
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING_GUID(2, UA_GUID("d8597619-5361-47c3-b81f-26b46a5b47fb")), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_REFERENCETYPE;
+        node_desc->attributes.SetBrowseName(1, "SomeReferences_test");
+        node_desc->attributes.SetDisplayName("en", "SomeReferences_test");
+        node_desc->attributes.SetDescription("en", "Description SomeReferences_test");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetIsAbstract(false);
+        node_desc->attributes.SetSymmetric(true);
+        node_desc->attributes.SetInverseName("en", "InvName1");
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=33");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=45");
+        node_desc->references.SetNodeClass(UA_NODECLASS_REFERENCETYPE);
+        node_desc->references.SetDisplayName("en", "HierarchicalReferences");
+        node_desc->references.SetBrowseName(0, "HierarchicalReferences");
+        node_desc->references.AddReferenceToVector();
+        // Ref2 - Reverse reference - In the types, it will have to be removed by the nucleus.
+        node_desc->references.SetNodeId("ns=2;i=200");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "temperature");
+        node_desc->references.SetBrowseName(0, "temperature");
+        node_desc->references.AddReferenceToVector(true);
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // NODE ns=3;g=3c74ac5c-f29e-497b-900c-6dce9381b688 - Node type VariableType
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING_GUID(3, UA_GUID("3c74ac5c-f29e-497b-900c-6dce9381b688")), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_VARIABLETYPE;
+        node_desc->attributes.SetBrowseName(1, "DataTypeDescriptionType_test");
+        node_desc->attributes.SetDisplayName("en", "DataTypeDescriptionType_test");
+        node_desc->attributes.SetDescription("en", "Description DataTypeDescriptionType_test");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetIsAbstract(false);
+        node_desc->attributes.SetDataType("i=12");
+        node_desc->attributes.SetValueRank(UA_VALUERANK_ANY);
+        node_desc->attributes.SetArrayDimmension(std::vector<uint32_t>());
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=63");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=45");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLETYPE);
+        node_desc->references.SetDisplayName("en", "BaseDataVariableType");
+        node_desc->references.SetBrowseName(0, "BaseDataVariableType");
+        node_desc->references.AddReferenceToVector();
+        nodes_description[nodes_ids.back()] = *node_desc;
+        // Ref2 - Forward reference
+        node_desc->references.SetNodeId("i=104");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=46");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "HasTypeDefinition");
+        node_desc->references.SetBrowseName(0, "HasTypeDefinition");
+        node_desc->references.AddReferenceToVector();
+        // Ref3 - Forward reference
+        node_desc->references.SetNodeId("i=105");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=46");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "DictionaryFragment");
+        node_desc->references.SetBrowseName(0, "DictionaryFragment");
+        node_desc->references.AddReferenceToVector();
+        // Ref2 - Reverse reference - In the types, it will have to be removed by the nucleus.
+        node_desc->references.SetNodeId("ns=2;i=200");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "temperature");
+        node_desc->references.SetBrowseName(0, "temperature");
+        node_desc->references.AddReferenceToVector(true);
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // NODE ns=4;g=23be18e1-49ab-4eb0-b06e-ded5696289a9 - OBJECTTYPE Node
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING_GUID(4, UA_GUID("23be18e1-49ab-4eb0-b06e-ded5696289a9")), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_OBJECTTYPE;
+        node_desc->attributes.SetBrowseName(1, "FolderType_test");
+        node_desc->attributes.SetDisplayName("en", "FolderType_test");
+        node_desc->attributes.SetDescription("en", "Description FolderType_test");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetIsAbstract(false);
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=58");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=45");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLETYPE);
+        node_desc->references.SetDisplayName("en", "BaseObjectType");
+        node_desc->references.SetBrowseName(0, "BaseObjectType");
+        node_desc->references.AddReferenceToVector();
+        // Ref2 - Reverse reference - In the types, it will have to be removed by the nucleus.
+        node_desc->references.SetNodeId("ns=2;i=200");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "temperature");
+        node_desc->references.SetBrowseName(0, "temperature");
+        node_desc->references.AddReferenceToVector(true);
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // NODE ns=2;g=879317f1-992b-4d94-841d-bc7510b3922d - VIEW must be ignored
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING_GUID(2, UA_GUID("879317f1-992b-4d94-841d-bc7510b3922d")), UA_TYPES_EXPANDEDNODEID); // Игнорируемый
+        node_desc->node_class = UA_NODECLASS_VIEW;
+        node_desc->attributes.SetBrowseName(1, "View test");
+        node_desc->attributes.SetDisplayName("en", "View test");
+        node_desc->attributes.SetDescription("en", "Description View test");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetIsAbstract(false);
+        // Ref1 - Reverse reference
+        node_desc->references.SetNodeId("ns=2;i=100");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECT);
+        node_desc->references.SetDisplayName("en", "vPLC1");
+        node_desc->references.SetBrowseName(0, "vPLC1");
+        node_desc->references.AddReferenceToVector(true);
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+
+        // --- private cases of processing ----
+        // node vplc1.test_node_2.browSepathtest - for some nodes you need to generate only forward references. BrowsePath test. Works only with string NodeID
+        // VPLC1, although it is a numerical NodeId, it does not matter, since the parent will be selected as vplc1.test_node_2, and this is a text NodeID.
+        // The space of the names should also coincide.
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2.BrowsePathTest"), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_OBJECT;
+        node_desc->attributes.SetBrowseName(1, "vPLC1.Test_node_2.BrowsePathTest");
+        node_desc->attributes.SetDisplayName("en", "vPLC1.Test_node_2.BrowsePathTest");
+        node_desc->attributes.SetDescription("en", "Description vPLC1.Test_node_2.BrowsePathTest");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetIsAbstract(false);
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=61");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=40");
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECTTYPE);
+        node_desc->references.SetDisplayName("en", "FolderType");
+        node_desc->references.SetBrowseName(0, "FolderType");
+        node_desc->references.AddReferenceToVector();
+        // Ref2 - Forward reference
+        node_desc->references.SetNodeId("ns=2;s=vPLC1.Test_node_2.BrowsePathTest.Browse2");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=46");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "vPLC1.Test_node_2.BrowsePathTest.Browse2");
+        node_desc->references.SetBrowseName(0, "vPLC1.Test_node_2.BrowsePathTest.Browse2");
+        node_desc->references.AddReferenceToVector();
+        // Ref3 - Forward reference
+        node_desc->references.SetNodeId("ns=2;s=vPLC1.Test_node_2.BrowsePathTest.Browse3");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=46");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "vPLC1.Test_node_2.BrowsePathTest.Browse3");
+        node_desc->references.SetBrowseName(0, "vPLC1.Test_node_2.BrowsePathTest.Browse3");
+        node_desc->references.AddReferenceToVector();
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // Node vPLC1.Test_node_2.BrowsePathTest.Browse2 - BrowsePath test.
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2.BrowsePathTest.Browse2"), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_VARIABLE;
+        node_desc->attributes.SetBrowseName(1, "vPLC1.Test_node_2.BrowsePathTest.Browse2");
+        node_desc->attributes.SetDisplayName("en", "vPLC1.Test_node_2.BrowsePathTest.Browse2");
+        node_desc->attributes.SetDescription("en", "Description vPLC1.Test_node_2.BrowsePathTest.Browse2");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetDataType("i=12");
+        node_desc->attributes.SetValueScalar("Test node 2 text");
+        node_desc->attributes.SetValueRank(UA_VALUERANK_SCALAR);
+        node_desc->attributes.SetArrayDimmension(std::vector<uint32_t>());
+        node_desc->attributes.SetMinimumSamplingInterval(200);
+        node_desc->attributes.SetHistorizing(false);
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=63");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=40");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLETYPE);
+        node_desc->references.SetDisplayName("en", "BaseDataVariableType");
+        node_desc->references.SetBrowseName(0, "BaseDataVariableType");
+        node_desc->references.AddReferenceToVector();
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // Test test of ignoring KEP system nodes, where nodeid begins with the symbol "_" + generation of reverse reference.
+        // Node ns=2;s=vPLC1.Test_node_2._Statistics
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING(2, "ns=2;s=vPLC1.Test_node_2._Statistics"), UA_TYPES_EXPANDEDNODEID);
+        node_desc->node_class = UA_NODECLASS_OBJECT;
+        node_desc->attributes.SetBrowseName(1, "vPLC1.Test_node_2._Statistics");
+        node_desc->attributes.SetDisplayName("en", "vPLC1.Test_node_2._Statistics");
+        node_desc->attributes.SetDescription("en", "Description vPLC1.Test_node_2._Statistics");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetIsAbstract(false);
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=61");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=40");
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECTTYPE);
+        node_desc->references.SetDisplayName("en", "FolderType");
+        node_desc->references.SetBrowseName(0, "FolderType");
+        node_desc->references.AddReferenceToVector();
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // Node vPLC1.Test_node_2.BrowsePathTest.Browse3 - Verification of the node with which will be HasTypeDefenition = i=62 [Basevariabletype]
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2.BrowsePathTest.Browse3"), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_VARIABLE;
+        node_desc->attributes.SetBrowseName(1, "vPLC1.Test_node_2.BrowsePathTest.Browse3");
+        node_desc->attributes.SetDisplayName("en", "vPLC1.Test_node_2.BrowsePathTest.Browse3");
+        node_desc->attributes.SetDescription("en", "Description vPLC1.Test_node_2.BrowsePathTest.Browse3");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetDataType("i=12");
+        node_desc->attributes.SetValueScalar("Test node 2 text");
+        node_desc->attributes.SetValueRank(UA_VALUERANK_SCALAR);
+        node_desc->attributes.SetArrayDimmension(std::vector<uint32_t>());
+        node_desc->attributes.SetMinimumSamplingInterval(200);
+        node_desc->attributes.SetHistorizing(false);
+        // Ref1 - Type
+        node_desc->references.SetNodeId("i=62");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=40");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLETYPE);
+        node_desc->references.SetDisplayName("en", "BaseVariableType");
+        node_desc->references.SetBrowseName(0, "BaseVariableType");
+        node_desc->references.AddReferenceToVector();
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        number_of_valid_class_nodes_to_export = valid_node_id.size();
+
+        // I add expected changes at the output to the model
+        cmp_ref_descr = nodes_description;
+        // Removing links and elements that we will not get at the output
+        for (auto& node : cmp_ref_descr)
+        {
+            std::vector<UATypesContainer<UA_ReferenceDescription>> new_refs;
+            for (size_t index = 0; index < node.second.references.GetReferences().size(); ++index)
             {
-                number_of_valid_class_nodes_to_export++;
-                // I add only valid NODE IDs to Set
-                valid_node_id.emplace(ua_node_id, UA_TYPES_EXPANDEDNODEID);
+                if (!node.second.references.GetListOfUsageRef()[index])
+                {
+                    new_refs.push_back(node.second.references.GetReferences()[index]);
+                }
             }
-            power++;
-            power = power == 8 ? 0 : power;
+            // I replace the old list with a new one with "remote" references, which are assumed that the exporter's core will remove
+            node.second.references.SetReferences(std::move(new_refs));
+
+            // For nodes in which there are no reverse references and they are added through BrowsePath, you need to add such references manually to the test
+            // sample, as the Will Appear at the output of the core.
+            // In the process, the algorithm in the GetNodesData method will find that there are no reverse references and add its option based on forming from BrowsePath.
+            const UATypesContainer<UA_ExpandedNodeId> br_path_test1(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2.BrowsePathTest"), UA_TYPES_EXPANDEDNODEID);
+            const UATypesContainer<UA_ExpandedNodeId> br_path_test2(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2.BrowsePathTest.Browse2"), UA_TYPES_EXPANDEDNODEID);
+            // For the node vplc1.test_node_2.BrowsePathTest.browse3, you need to replace in the link type HasTypeDefinition = i=62 [Basevariabletype] on i=63
+            const UATypesContainer<UA_ExpandedNodeId> br_path_test3(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2.BrowsePathTest.Browse3"), UA_TYPES_EXPANDEDNODEID);
+
+            if (node.first == br_path_test1)
+            {
+                // As, how is the simulation of KEP references, then I will add a link that the core will add to the sample of comparative data reference.
+                node.second.references.SetNodeId("ns=2;s=vPLC1.Test_node_2");
+                node.second.references.SetIsForward(false);
+                node.second.references.SetReferenceTypeId("i=47");
+                node.second.references.AddReferenceToVector();
+            }
+            if (node.first == br_path_test2)
+            {
+                // As, how is the simulation of KEP references, then I will add a reference that the core will add to the sample of comparative data references.
+                node.second.references.SetNodeId("ns=2;s=vPLC1.Test_node_2.BrowsePathTest");
+                node.second.references.SetIsForward(false);
+                node.second.references.SetReferenceTypeId("i=47");
+                node.second.references.AddReferenceToVector();
+            }
+            if (node.first == br_path_test3)
+            {
+                // As, how is the simulation of KEP references, then I will add a reference that the core will add to the sample of comparative data references.
+                node.second.references.SetNodeId("ns=2;s=vPLC1.Test_node_2.BrowsePathTest");
+                node.second.references.SetIsForward(false);
+                node.second.references.SetReferenceTypeId("i=47");
+                node.second.references.AddReferenceToVector();
+                // I will change the referenced node in the reference, since the kernel will replace the reference
+                auto refs = node.second.references.GetReferences();
+                refs[0].GetRef().nodeId = UA_EXPANDEDNODEID("i=63");
+                node.second.references.SetReferences(std::move(refs));
+            }
         }
 
-        // Additionally, I add nodes with BrowsePath. These nodes must not have an Invert Reference.
-        // During the process, the algorithm in the GetNodesData method will detect that there are no back references and will add its own version based on the formation from BrowsePath.
-        std::string first_browse_path_node = "BrowsePathParent";
-        std::string second_browse_path_node = "BrowsePathParent.BrowsePathChild";
-        auto ua_node_first_browse_path_node = UA_EXPANDEDNODEID_STRING(2, first_browse_path_node.data());
-        nodes_id.emplace_back(ua_node_first_browse_path_node, UA_TYPES_EXPANDEDNODEID);
-        number_of_valid_class_nodes_to_export++;
-        nodes_with_class.try_emplace(UATypesContainer<UA_ExpandedNodeId>(ua_node_first_browse_path_node, UA_TYPES_EXPANDEDNODEID), UA_NODECLASS_OBJECT);
-        valid_node_id.emplace(ua_node_first_browse_path_node, UA_TYPES_EXPANDEDNODEID);
-        auto ua_node_second_browse_path_node = UA_EXPANDEDNODEID_STRING(2, second_browse_path_node.data());
-        nodes_id.emplace_back(ua_node_second_browse_path_node, UA_TYPES_EXPANDEDNODEID);
-        number_of_valid_class_nodes_to_export++;
-        nodes_with_class.try_emplace(UATypesContainer<UA_ExpandedNodeId>(ua_node_second_browse_path_node, UA_TYPES_EXPANDEDNODEID), UA_NODECLASS_VARIABLE);
-        valid_node_id.emplace(ua_node_second_browse_path_node, UA_TYPES_EXPANDEDNODEID);
-
-        // Additionally, I add a node that will have HasTypeDefinition= i=62 [BaseVariableType]
-        std::string change_definition_browse_path_node = "KEPDefinitionProblem";
-        auto ua_node_change_definition_browse_path_node = UA_EXPANDEDNODEID_STRING(2, change_definition_browse_path_node.data());
-        nodes_id.emplace_back(ua_node_change_definition_browse_path_node, UA_TYPES_EXPANDEDNODEID);
-        number_of_valid_class_nodes_to_export++;
-        nodes_with_class.try_emplace(UATypesContainer<UA_ExpandedNodeId>(ua_node_change_definition_browse_path_node, UA_TYPES_EXPANDEDNODEID), UA_NODECLASS_VARIABLE);
-        valid_node_id.emplace(ua_node_change_definition_browse_path_node, UA_TYPES_EXPANDEDNODEID);
-
-        MESSAGE("Valid nodes");
-        for (const auto& valid_node : nodes_with_class)
-        {
-            MESSAGE(valid_node.first.ToString(), "  ", valid_node.second, " is valid: ", valid_node_id.contains(valid_node.first));
-        }
-
-        std::map<UATypesContainer<UA_ExpandedNodeId>, std::vector<UATypesContainer<UA_ReferenceDescription>>> cmp_ref_descr;
         Logger logger("test");
         logger.SetLevel(LogLevel::Debug);
 
         MockOpen62541 open(logger);
         MockEncoder encoder(logger, "nodeset");
 
-        const auto parent_ref = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER);
-
 #pragma region MockEncoder - exporting nodes
         // In any case, these methods can be called many times in a loop.
         REQUIRE_CALL(encoder, AddNodeObject(_))
-            .WITH(_1.GetExpNodeId().GetStatusCode() == UA_STATUSCODE_GOOD)
             .WITH(_1.GetExpNodeId().GetType() == UA_TYPES_EXPANDEDNODEID)
             .LR_WITH(UA_ExpandedNodeId_equal(&_1.GetExpNodeId().GetRef(), &exp_nodeid_null) == false)
-            .WITH(_1.GetParentNodeId().GetStatusCode() == UA_STATUSCODE_GOOD)
             .WITH(_1.GetParentNodeId().GetType() == UA_TYPES_EXPANDEDNODEID)
             .LR_WITH(UA_ExpandedNodeId_equal(&_1.GetParentNodeId().GetRef(), &exp_nodeid_null) == false)
             .WITH(_1.GetNodeClass() == UA_NodeClass::UA_NODECLASS_OBJECT)
             .WITH(_1.GetNodeReferences().empty() == false)
-            .LR_SIDE_EFFECT(CheckRefferenceDescriptions(cmp_ref_descr.at(_1.GetExpNodeId()), _1.GetNodeReferences()))
+            .LR_SIDE_EFFECT(CheckRefferenceDescriptions(cmp_ref_descr.at(_1.GetExpNodeId()).references.GetReferences(), _1.GetNodeReferences()))
             .WITH(_1.GetAttributes().empty() == false)
             .LR_WITH(valid_node_id.contains(_1.GetExpNodeId()) == true)
             .LR_SIDE_EFFECT(number_of_add_nodes_to_export++)
@@ -444,15 +1175,13 @@ TEST_SUITE("nodesetexporter")
             .TIMES(AT_LEAST(1));
 
         REQUIRE_CALL(encoder, AddNodeVariable(_))
-            .WITH(_1.GetExpNodeId().GetStatusCode() == UA_STATUSCODE_GOOD)
             .WITH(_1.GetExpNodeId().GetType() == UA_TYPES_EXPANDEDNODEID)
             .LR_WITH(UA_ExpandedNodeId_equal(&_1.GetExpNodeId().GetRef(), &exp_nodeid_null) == false)
-            .WITH(_1.GetParentNodeId().GetStatusCode() == UA_STATUSCODE_GOOD)
             .WITH(_1.GetParentNodeId().GetType() == UA_TYPES_EXPANDEDNODEID)
             .LR_WITH(UA_ExpandedNodeId_equal(&_1.GetParentNodeId().GetRef(), &exp_nodeid_null) == false)
             .WITH(_1.GetNodeClass() == UA_NodeClass::UA_NODECLASS_VARIABLE)
             .WITH(_1.GetNodeReferences().empty() == false)
-            .LR_SIDE_EFFECT(CheckRefferenceDescriptions(cmp_ref_descr.at(_1.GetExpNodeId()), _1.GetNodeReferences()))
+            .LR_SIDE_EFFECT(CheckRefferenceDescriptions(cmp_ref_descr.at(_1.GetExpNodeId()).references.GetReferences(), _1.GetNodeReferences()))
             .WITH(_1.GetAttributes().empty() == false)
             .LR_WITH(valid_node_id.contains(_1.GetExpNodeId()) == true)
             .LR_SIDE_EFFECT(number_of_add_nodes_to_export++)
@@ -460,15 +1189,13 @@ TEST_SUITE("nodesetexporter")
             .TIMES(AT_LEAST(1));
 
         REQUIRE_CALL(encoder, AddNodeObjectType(_))
-            .WITH(_1.GetExpNodeId().GetStatusCode() == UA_STATUSCODE_GOOD)
             .WITH(_1.GetExpNodeId().GetType() == UA_TYPES_EXPANDEDNODEID)
             .LR_WITH(UA_ExpandedNodeId_equal(&_1.GetExpNodeId().GetRef(), &exp_nodeid_null) == false)
-            .WITH(_1.GetParentNodeId().GetStatusCode() == UA_STATUSCODE_GOOD)
             .WITH(_1.GetParentNodeId().GetType() == UA_TYPES_EXPANDEDNODEID)
             .LR_WITH(UA_ExpandedNodeId_equal(&_1.GetParentNodeId().GetRef(), &exp_nodeid_null) == false)
             .WITH(_1.GetNodeClass() == UA_NodeClass::UA_NODECLASS_OBJECTTYPE)
             .WITH(_1.GetNodeReferences().empty() == false)
-            .LR_SIDE_EFFECT(CheckRefferenceDescriptions(cmp_ref_descr.at(_1.GetExpNodeId()), _1.GetNodeReferences()))
+            .LR_SIDE_EFFECT(CheckRefferenceDescriptions(cmp_ref_descr.at(_1.GetExpNodeId()).references.GetReferences(), _1.GetNodeReferences()))
             .WITH(_1.GetAttributes().empty() == false)
             .LR_WITH(valid_node_id.contains(_1.GetExpNodeId()) == true)
             .LR_SIDE_EFFECT(number_of_add_nodes_to_export++)
@@ -476,15 +1203,13 @@ TEST_SUITE("nodesetexporter")
             .TIMES(AT_LEAST(1));
 
         REQUIRE_CALL(encoder, AddNodeVariableType(_))
-            .WITH(_1.GetExpNodeId().GetStatusCode() == UA_STATUSCODE_GOOD)
             .WITH(_1.GetExpNodeId().GetType() == UA_TYPES_EXPANDEDNODEID)
             .LR_WITH(UA_ExpandedNodeId_equal(&_1.GetExpNodeId().GetRef(), &exp_nodeid_null) == false)
-            .WITH(_1.GetParentNodeId().GetStatusCode() == UA_STATUSCODE_GOOD)
             .WITH(_1.GetParentNodeId().GetType() == UA_TYPES_EXPANDEDNODEID)
             .LR_WITH(UA_ExpandedNodeId_equal(&_1.GetParentNodeId().GetRef(), &exp_nodeid_null) == false)
             .WITH(_1.GetNodeClass() == UA_NodeClass::UA_NODECLASS_VARIABLETYPE)
             .WITH(_1.GetNodeReferences().empty() == false)
-            .LR_SIDE_EFFECT(CheckRefferenceDescriptions(cmp_ref_descr.at(_1.GetExpNodeId()), _1.GetNodeReferences()))
+            .LR_SIDE_EFFECT(CheckRefferenceDescriptions(cmp_ref_descr.at(_1.GetExpNodeId()).references.GetReferences(), _1.GetNodeReferences()))
             .WITH(_1.GetAttributes().empty() == false)
             .LR_WITH(valid_node_id.contains(_1.GetExpNodeId()) == true)
             .LR_SIDE_EFFECT(number_of_add_nodes_to_export++)
@@ -492,15 +1217,13 @@ TEST_SUITE("nodesetexporter")
             .TIMES(AT_LEAST(1));
 
         REQUIRE_CALL(encoder, AddNodeReferenceType(_))
-            .WITH(_1.GetExpNodeId().GetStatusCode() == UA_STATUSCODE_GOOD)
             .WITH(_1.GetExpNodeId().GetType() == UA_TYPES_EXPANDEDNODEID)
             .LR_WITH(UA_ExpandedNodeId_equal(&_1.GetExpNodeId().GetRef(), &exp_nodeid_null) == false)
-            .WITH(_1.GetParentNodeId().GetStatusCode() == UA_STATUSCODE_GOOD)
             .WITH(_1.GetParentNodeId().GetType() == UA_TYPES_EXPANDEDNODEID)
             .LR_WITH(UA_ExpandedNodeId_equal(&_1.GetParentNodeId().GetRef(), &exp_nodeid_null) == false)
             .WITH(_1.GetNodeClass() == UA_NodeClass::UA_NODECLASS_REFERENCETYPE)
             .WITH(_1.GetNodeReferences().empty() == false)
-            .LR_SIDE_EFFECT(CheckRefferenceDescriptions(cmp_ref_descr.at(_1.GetExpNodeId()), _1.GetNodeReferences()))
+            .LR_SIDE_EFFECT(CheckRefferenceDescriptions(cmp_ref_descr.at(_1.GetExpNodeId()).references.GetReferences(), _1.GetNodeReferences()))
             .WITH(_1.GetAttributes().empty() == false)
             .LR_WITH(valid_node_id.contains(_1.GetExpNodeId()) == true)
             .LR_SIDE_EFFECT(number_of_add_nodes_to_export++)
@@ -508,15 +1231,13 @@ TEST_SUITE("nodesetexporter")
             .TIMES(AT_LEAST(1));
 
         REQUIRE_CALL(encoder, AddNodeDataType(_))
-            .WITH(_1.GetExpNodeId().GetStatusCode() == UA_STATUSCODE_GOOD)
             .WITH(_1.GetExpNodeId().GetType() == UA_TYPES_EXPANDEDNODEID)
             .LR_WITH(UA_ExpandedNodeId_equal(&_1.GetExpNodeId().GetRef(), &exp_nodeid_null) == false)
-            .WITH(_1.GetParentNodeId().GetStatusCode() == UA_STATUSCODE_GOOD)
             .WITH(_1.GetParentNodeId().GetType() == UA_TYPES_EXPANDEDNODEID)
             .LR_WITH(UA_ExpandedNodeId_equal(&_1.GetParentNodeId().GetRef(), &exp_nodeid_null) == false)
             .WITH(_1.GetNodeClass() == UA_NodeClass::UA_NODECLASS_DATATYPE)
             .WITH(_1.GetNodeReferences().empty() == false)
-            .LR_SIDE_EFFECT(CheckRefferenceDescriptions(cmp_ref_descr.at(_1.GetExpNodeId()), _1.GetNodeReferences()))
+            .LR_SIDE_EFFECT(CheckRefferenceDescriptions(cmp_ref_descr.at(_1.GetExpNodeId()).references.GetReferences(), _1.GetNodeReferences()))
             .WITH(_1.GetAttributes().empty() == false)
             .LR_WITH(valid_node_id.contains(_1.GetExpNodeId()) == true)
             .LR_SIDE_EFFECT(number_of_add_nodes_to_export++)
@@ -543,7 +1264,7 @@ TEST_SUITE("nodesetexporter")
             REQUIRE_CALL(open, ReadNodeClasses(_))
                 .WITH(_1.empty() == false)
                 .LR_SIDE_EFFECT(for (MockOpen62541::NodeClassesRequestResponse& ncs
-                                     : _1) { ncs.node_class = nodes_with_class.at(ncs.exp_node_id); })
+                                     : _1) { ncs.node_class = nodes_description.at(ncs.exp_node_id).node_class; })
                 .RETURN(StatusResults::Good)
                 .IN_SEQUENCE(seq);
 
@@ -556,8 +1277,8 @@ TEST_SUITE("nodesetexporter")
                     {
                         try
                         {
-                            MESSAGE("Attr: ", attr.first, ", data: ", VariantsOfAttrToString(AttributesGen(attr.first)));
-                            attr.second.emplace(std::move(AttributesGen(attr.first)));
+                            MESSAGE("Attr: ", attr.first, ", data: ", VariantsOfAttrToString(nodes_description.at(narr.exp_node_id).attributes.GetWrappAttr(attr.first)));
+                            attr.second.emplace(nodes_description.at(narr.exp_node_id).attributes.GetWrappAttr(attr.first));
                         }
                         catch (std::exception& exc)
                         {
@@ -572,160 +1293,28 @@ TEST_SUITE("nodesetexporter")
             REQUIRE_CALL(open, ReadNodeReferences(_))
                 .WITH(_1.empty() == false)
                 .LR_SIDE_EFFECT(for (MockOpen62541::NodeReferencesRequestResponse& nrrr
-                                     : _1) {
-                    size_t count = GetRandomNumber(50, 100);
-                    UA_Int64 start_ref_type_id = UA_NS0ID_HIERARCHICALREFERENCES;
-                    UA_Boolean start_is_fwd = UA_FALSE;
-                    const auto current_node_class = nodes_with_class.at(nrrr.exp_node_id);
-                    auto first_browse_path_node_str = UA_STRING(first_browse_path_node.data());
-                    auto second_browse_path_node_str = UA_STRING(second_browse_path_node.data());
-                    auto change_definition_browse_path_node_str = UA_STRING(change_definition_browse_path_node.data());
-                    for (size_t index = 0; index < count; index++)
-                    {
-                        // For some nodes, you only need to generate direct references. BrowsePath validation test.
-                        if (nrrr.exp_node_id.GetRef().nodeId.identifierType == UA_NodeIdType::UA_NODEIDTYPE_STRING
-                            && (UA_String_equal(&nrrr.exp_node_id.GetRef().nodeId.identifier.string, &first_browse_path_node_str) // NOLINT(cppcoreguidelines-pro-type-union-access)
-                                || UA_String_equal(&nrrr.exp_node_id.GetRef().nodeId.identifier.string, &second_browse_path_node_str))) // NOLINT(cppcoreguidelines-pro-type-union-access)
-                        {
-                            start_is_fwd = UA_TRUE;
-                            nrrr.references.push_back(ReferenceDescriptionGen(start_ref_type_id, start_is_fwd));
-                        }
-                        else
-                        {
-                            // During generation, it is possible that identical references will be generated for the same node, this will make it possible to check the formation of Alias,
-                            // since aliases can only be generated from one instance of the type.
-                            nrrr.references.push_back(ReferenceDescriptionGen(start_ref_type_id, start_is_fwd));
-                        }
-                    }
-
-                    // I fill in the list of references for comparison, excluding ignored nodes
-                    std::vector<UATypesContainer<UA_ReferenceDescription>> new_references;
-                    const auto has_subtype = UA_NODEID_NUMERIC(0, UA_NS0ID_HASSUBTYPE);
-
-                    // The algorithm uses a mechanism for adding a reference to the base object, so the same reference must be added to the starting node of test references (test data).
-                    if (UA_ExpandedNodeId_equal(&nrrr.exp_node_id.GetRef(), &nodes_id[0].GetRef()))
-                    {
-                        const auto start_node_object = UATypesContainer<UA_ExpandedNodeId>(parent_ref, UA_TYPES_EXPANDEDNODEID);
-                        UATypesContainer<UA_ReferenceDescription> insertion_ref_desc(UA_TYPES_REFERENCEDESCRIPTION);
-                        insertion_ref_desc.GetRef().isForward = false;
-                        auto organize_node_id = UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES);
-                        UA_NodeId_copy(&organize_node_id, &insertion_ref_desc.GetRef().referenceTypeId);
-                        UA_NodeId_copy(&start_node_object.GetRef().nodeId, &insertion_ref_desc.GetRef().nodeId.nodeId);
-                        new_references.push_back(std::move(insertion_ref_desc));
-                    }
-
-                    for (auto& reference : nrrr.references)
-                    {
-                        const auto ch_node_id = UATypesContainer<UA_ExpandedNodeId>(reference.GetRef().nodeId, UA_TYPES_EXPANDEDNODEID);
-                        if (valid_node_id.contains(ch_node_id))
-                        {
-                            // If the nodes are of any (Instance) class, then I add all the references
-                            if (!types_nodeclasses.contains(current_node_class))
-                            {
-                                new_references.push_back(reference);
-                            }
-                            // If the nodes are of the TYPE class, then only direct nodes, since the back references will be removed by the algorithm.
-                            else
-                            {
-                                if (reference.GetRef().isForward || UA_NodeId_equal(&reference.GetRef().referenceTypeId, &has_subtype))
-                                {
-                                    new_references.push_back(reference);
-                                }
-                            }
-                        }
-                    }
-
-                    // This reference should not be included in the comparison list, because the reference will be changed by the exporter and will not be found by the test, which will cause an error.
-                    // Therefore, I place the code behind filling new_references.
-                    if ( // I'm inserting an incorrect HasTypeDefinition reference. KEP insertion test. Only for node with identifier = KEPDefinitionProblem
-                        nrrr.exp_node_id.GetRef().nodeId.identifierType == UA_NodeIdType::UA_NODEIDTYPE_STRING
-                        && (UA_String_equal(&nrrr.exp_node_id.GetRef().nodeId.identifier.string, &change_definition_browse_path_node_str))) // NOLINT(cppcoreguidelines-pro-type-union-access)
-                    {
-                        auto reference_hastypedef_id = UA_NODEID_NUMERIC(0, UA_NS0ID_HASTYPEDEFINITION);
-                        UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-                        UA_NodeId_copy(&reference_hastypedef_id, &ref_desc_cnt.GetRef().referenceTypeId);
-                        ref_desc_cnt.GetRef().nodeId = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEVARIABLETYPE); // i=62 [BaseVariableType]
-                        ref_desc_cnt.GetRef().isForward = true;
-                        nrrr.references.push_back(ref_desc_cnt);
-                    }
-
-                    // Additionally, I add BrowsePath nodes to the list to compare what should happen.
-                    auto reference_type_id = UA_NODEID_NUMERIC(0, UA_NS0ID_HASCOMPONENT);
-                    if (nrrr.exp_node_id.GetRef().nodeId.identifierType == UA_NodeIdType::UA_NODEIDTYPE_STRING
-                        && UA_String_equal(&nrrr.exp_node_id.GetRef().nodeId.identifier.string, &first_browse_path_node_str)) // NOLINT(cppcoreguidelines-pro-type-union-access)
-                    {
-                        UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-                        UA_NodeId_copy(&reference_type_id, &ref_desc_cnt.GetRef().referenceTypeId);
-                        UA_ExpandedNodeId_copy(&parent_start_node_replacer.GetRef(), &ref_desc_cnt.GetRef().nodeId); // i=85
-                        ref_desc_cnt.GetRef().isForward = false;
-                        new_references.push_back(ref_desc_cnt);
-                    }
-
-                    if (nrrr.exp_node_id.GetRef().nodeId.identifierType == UA_NodeIdType::UA_NODEIDTYPE_STRING
-                        && UA_String_equal(&nrrr.exp_node_id.GetRef().nodeId.identifier.string, &second_browse_path_node_str)) // NOLINT(cppcoreguidelines-pro-type-union-access)
-                    {
-                        UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-                        UA_NodeId_copy(&reference_type_id, &ref_desc_cnt.GetRef().referenceTypeId);
-                        UA_ExpandedNodeId_copy(&ua_node_first_browse_path_node, &ref_desc_cnt.GetRef().nodeId); // ns=2;s=BrowsePathParent
-                        ref_desc_cnt.GetRef().isForward = false;
-                        new_references.push_back(ref_desc_cnt);
-                    }
-
-                    // For KEP insertion testing, I expect the reference with HasTypeDefinition = i=62 [BaseVariableType] to be replaced with HasTypeDefinition = i=63 [BaseDataVariableType]
-                    if (nrrr.exp_node_id.GetRef().nodeId.identifierType == UA_NodeIdType::UA_NODEIDTYPE_STRING
-                        && UA_String_equal(&nrrr.exp_node_id.GetRef().nodeId.identifier.string, &change_definition_browse_path_node_str)) // NOLINT(cppcoreguidelines-pro-type-union-access)
-                    {
-                        UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-                        ref_desc_cnt.GetRef().referenceTypeId = UA_NODEID_NUMERIC(0, UA_NS0ID_HASTYPEDEFINITION);
-                        ref_desc_cnt.GetRef().nodeId = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE); // i=63 [BaseDataVariableType]
-                        ref_desc_cnt.GetRef().isForward = true;
-                        new_references.push_back(ref_desc_cnt);
-                    }
-
-                    // To test reference of type HasSubtype, I add back references of this type, since other references in the TYPE classes will be removed
-                    if (types_nodeclasses.contains(current_node_class))
-                    {
-                        MESSAGE("ADD SUBTYPE TO NODE: ", nrrr.exp_node_id.ToString(), ", class: ", types_nodeclasses.at(current_node_class));
-                        UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-                        switch (current_node_class)
-                        {
-                        case UA_NODECLASS_OBJECTTYPE:
-                            ref_desc_cnt.GetRef().nodeId = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEOBJECTTYPE); // i=58 [BaseObjectType]
-                            break;
-                        case UA_NODECLASS_VARIABLETYPE:
-                            ref_desc_cnt.GetRef().nodeId = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEVARIABLETYPE); // i=62 [BaseVariableType]
-                            break;
-                        case UA_NODECLASS_REFERENCETYPE:
-                            ref_desc_cnt.GetRef().nodeId = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_REFERENCES); // i=31 [References]
-                            break;
-                        case UA_NODECLASS_DATATYPE:
-                            ref_desc_cnt.GetRef().nodeId = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEDATATYPE); // i=24 [BaseDataType]
-                            break;
-                        default:
-                            FAIL(true);
-                        }
-                        ref_desc_cnt.GetRef().referenceTypeId = UA_NODEID_NUMERIC(0, UA_NS0ID_HASSUBTYPE);
-                        ref_desc_cnt.GetRef().isForward = false;
-                        new_references.push_back(ref_desc_cnt);
-                        nrrr.references.push_back(ref_desc_cnt);
-                    }
-
-                    cmp_ref_descr.insert({nrrr.exp_node_id, new_references});
-                })
+                                     : _1) { nrrr.references = nodes_description.at(nrrr.exp_node_id).references.GetReferences(); })
                 .RETURN(StatusResults::Good)
                 .IN_SEQUENCE(seq);
 
             REQUIRE_CALL(encoder, AddAliases(_)).WITH(_1.empty() == false).RETURN(StatusResults::Good).IN_SEQUENCE(seq);
             REQUIRE_CALL(encoder, End()).RETURN(StatusResults::Good).IN_SEQUENCE(seq);
 
-            NodesetExporterLoop
-                exporter_loop(std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>>{{nodes_id[0].ToString(), nodes_id}}, open, encoder, logger, parent_start_node_replacer, false);
-            StatusResults status_result = StatusResults::Fail;
+            NodesetExporterLoop exporter_loop(
+                std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>>{{nodes_ids[0].ToString(), nodes_ids}},
+                open,
+                encoder,
+                logger,
+                {.is_perf_timer_enable = false,
+                 .ns0_custom_nodes_ready_to_work = false,
+                 .flat_list_of_nodes = {.is_enable = false, .create_missing_start_node = false, .allow_abstract_variable = false},
+                 .parent_start_node_replacer = parent_start_node_replacer});
+            auto status_result = StatusResults(StatusResults::Fail);
             CHECK_NOTHROW(status_result = exporter_loop.StartExport());
-            // The number of nodes suitable for export should be equal to the number of nodes that will actually be exported
+            // The number of nodes suitable for classes for export should be equal to the number of nodes that will be actually transferred for export
             REQUIRE_EQ(number_of_valid_class_nodes_to_export, number_of_add_nodes_to_export);
-            CHECK_EQ(status_result, StatusResults::Good);
-            MESSAGE("Number of nodes: ", nodes_id.size(), ", number of nodes to be exported under incoming classes: ", number_of_add_nodes_to_export);
+            CHECK_EQ(status_result.GetStatus(), StatusResults::Good);
+            MESSAGE("Number of nodes: ", nodes_ids.size(), ", number of nodes to be exported under incoming classes: ", number_of_add_nodes_to_export);
         }
 
         SUBCASE("Core test with a limit on a single data request")
@@ -733,9 +1322,9 @@ TEST_SUITE("nodesetexporter")
             REQUIRE_CALL(open, ReadNodeClasses(_))
                 .WITH(_1.empty() == false)
                 .LR_SIDE_EFFECT(for (MockOpen62541::NodeClassesRequestResponse& ncs
-                                     : _1) { ncs.node_class = nodes_with_class.at(ncs.exp_node_id); })
+                                     : _1) { ncs.node_class = nodes_description.at(ncs.exp_node_id).node_class; })
                 .RETURN(StatusResults::Good)
-                .TIMES(AT_LEAST(2)); // This method must be called more than one time in a loop with a set number of nodes
+                .TIMES(AT_LEAST(2)); // Этот метод должен вызываться более 1 раза в цикле при установленном количестве узлов
 
             REQUIRE_CALL(open, ReadNodesAttributes(_))
                 .WITH(_1.empty() == false)
@@ -746,8 +1335,8 @@ TEST_SUITE("nodesetexporter")
                     {
                         try
                         {
-                            MESSAGE("Attr: ", attr.first, ", data: ", VariantsOfAttrToString(AttributesGen(attr.first)));
-                            attr.second.emplace(std::move(AttributesGen(attr.first)));
+                            MESSAGE("Attr: ", attr.first, ", data: ", VariantsOfAttrToString(nodes_description.at(narr.exp_node_id).attributes.GetWrappAttr(attr.first)));
+                            attr.second.emplace(nodes_description.at(narr.exp_node_id).attributes.GetWrappAttr(attr.first));
                         }
                         catch (std::exception& exc)
                         {
@@ -762,162 +1351,29 @@ TEST_SUITE("nodesetexporter")
             REQUIRE_CALL(open, ReadNodeReferences(_))
                 .WITH(_1.empty() == false)
                 .LR_SIDE_EFFECT(for (MockOpen62541::NodeReferencesRequestResponse& nrrr
-                                     : _1) {
-                    size_t count = GetRandomNumber(50, 100);
-                    UA_Int64 start_ref_type_id = UA_NS0ID_HIERARCHICALREFERENCES;
-                    UA_Boolean start_is_fwd = UA_FALSE;
-                    const auto current_node_class = nodes_with_class.at(nrrr.exp_node_id);
-                    auto first_browse_path_node_str = UA_STRING(first_browse_path_node.data());
-                    auto second_browse_path_node_str = UA_STRING(second_browse_path_node.data());
-                    auto change_definition_browse_path_node_str = UA_STRING(change_definition_browse_path_node.data());
-                    for (size_t index = 0; index < count; index++)
-                    {
-                        // For some nodes, you only need to generate direct references. BrowsePath validation test.
-                        if (nrrr.exp_node_id.GetRef().nodeId.identifierType == UA_NodeIdType::UA_NODEIDTYPE_STRING
-                            && (UA_String_equal(&nrrr.exp_node_id.GetRef().nodeId.identifier.string, &first_browse_path_node_str) // NOLINT(cppcoreguidelines-pro-type-union-access)
-                                || UA_String_equal(&nrrr.exp_node_id.GetRef().nodeId.identifier.string, &second_browse_path_node_str))) // NOLINT(cppcoreguidelines-pro-type-union-access)
-                        {
-                            start_is_fwd = UA_TRUE;
-                            nrrr.references.push_back(ReferenceDescriptionGen(start_ref_type_id, start_is_fwd));
-                        }
-                        else
-                        {
-                            // During generation, it is possible that identical references will be generated for the same node, this will make it possible to check the formation of Alias,
-                            // since aliases can only be generated from one instance of the type.
-                            nrrr.references.push_back(ReferenceDescriptionGen(start_ref_type_id, start_is_fwd));
-                        }
-                    }
-
-                    // Populate the list of references to compare, excluding ignored nodes
-                    std::vector<UATypesContainer<UA_ReferenceDescription>> new_references;
-
-                    // The algorithm uses a mechanism for adding a reference to the base object, so the same reference must be added to the starting node of test references (test data).
-                    if (UA_ExpandedNodeId_equal(&nrrr.exp_node_id.GetRef(), &nodes_id[0].GetRef()))
-                    {
-                        const auto start_node_object = UATypesContainer<UA_ExpandedNodeId>(parent_ref, UA_TYPES_EXPANDEDNODEID);
-                        UATypesContainer<UA_ReferenceDescription> insertion_ref_desc(UA_TYPES_REFERENCEDESCRIPTION);
-                        insertion_ref_desc.GetRef().isForward = false;
-                        auto organize_node_id = UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES);
-                        UA_NodeId_copy(&organize_node_id, &insertion_ref_desc.GetRef().referenceTypeId);
-                        UA_NodeId_copy(&start_node_object.GetRef().nodeId, &insertion_ref_desc.GetRef().nodeId.nodeId);
-                        new_references.push_back(std::move(insertion_ref_desc));
-                    }
-
-                    const auto has_subtype = UA_NODEID_NUMERIC(0, UA_NS0ID_HASSUBTYPE);
-                    for (auto& reference : nrrr.references)
-                    {
-                        const auto ch_node_id = UATypesContainer<UA_ExpandedNodeId>(reference.GetRef().nodeId, UA_TYPES_EXPANDEDNODEID);
-                        if (valid_node_id.contains(ch_node_id))
-                        {
-                            // If the nodes are of any (Instance) class, then I add all the references
-                            if (!types_nodeclasses.contains(current_node_class))
-                            {
-                                new_references.push_back(reference);
-                            }
-                            // If the nodes are of the TYPE class, then only direct nodes, since the back references will be removed by the algorithm.
-                            else
-                            {
-                                if (reference.GetRef().isForward || UA_NodeId_equal(&reference.GetRef().referenceTypeId, &has_subtype))
-                                {
-                                    new_references.push_back(reference);
-                                }
-                            }
-                        }
-                    }
-
-                    // This reference should not be included in the comparison list, because the reference will be changed by the exporter and will not be found by the test,
-                    // which will cause an error. Therefore, I place the code behind filling new_references.
-                    if ( // Inserting an incorrect HasTypeDefinition reference. KEP insertion test. Only for node with identifier = KEPDefinitionProblem
-                        nrrr.exp_node_id.GetRef().nodeId.identifierType == UA_NodeIdType::UA_NODEIDTYPE_STRING
-                        && (UA_String_equal(&nrrr.exp_node_id.GetRef().nodeId.identifier.string, &change_definition_browse_path_node_str))) // NOLINT(cppcoreguidelines-pro-type-union-access)
-                    {
-                        auto reference_hastypedef_id = UA_NODEID_NUMERIC(0, UA_NS0ID_HASTYPEDEFINITION);
-                        UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-                        UA_NodeId_copy(&reference_hastypedef_id, &ref_desc_cnt.GetRef().referenceTypeId);
-                        ref_desc_cnt.GetRef().nodeId = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEVARIABLETYPE); // i=62 [BaseVariableType]
-                        ref_desc_cnt.GetRef().isForward = true;
-                        nrrr.references.push_back(ref_desc_cnt);
-                    }
-
-                    // Additionally, you need to add the BrowsePath nodes to the list to compare what should happen.
-                    auto reference_type_id = UA_NODEID_NUMERIC(0, UA_NS0ID_HASCOMPONENT);
-                    if (nrrr.exp_node_id.GetRef().nodeId.identifierType == UA_NodeIdType::UA_NODEIDTYPE_STRING
-                        && UA_String_equal(&nrrr.exp_node_id.GetRef().nodeId.identifier.string, &first_browse_path_node_str)) // NOLINT(cppcoreguidelines-pro-type-union-access)
-                    {
-                        UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-                        UA_NodeId_copy(&reference_type_id, &ref_desc_cnt.GetRef().referenceTypeId);
-                        UA_ExpandedNodeId_copy(&parent_start_node_replacer.GetRef(), &ref_desc_cnt.GetRef().nodeId); // i=85
-                        ref_desc_cnt.GetRef().isForward = false;
-                        new_references.push_back(ref_desc_cnt);
-                    }
-
-                    if (nrrr.exp_node_id.GetRef().nodeId.identifierType == UA_NodeIdType::UA_NODEIDTYPE_STRING
-                        && UA_String_equal(&nrrr.exp_node_id.GetRef().nodeId.identifier.string, &second_browse_path_node_str)) // NOLINT(cppcoreguidelines-pro-type-union-access)
-                    {
-                        UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-                        UA_NodeId_copy(&reference_type_id, &ref_desc_cnt.GetRef().referenceTypeId);
-                        UA_ExpandedNodeId_copy(&ua_node_first_browse_path_node, &ref_desc_cnt.GetRef().nodeId); // ns=2;s=BrowsePathParent
-                        ref_desc_cnt.GetRef().isForward = false;
-                        new_references.push_back(ref_desc_cnt);
-                    }
-
-                    // For KEP insertion testing, Expect the reference with HasTypeDefinition = i=62 [BaseVariableType] to be replaced with HasTypeDefinition = i=63 [BaseDataVariableType]
-                    if (nrrr.exp_node_id.GetRef().nodeId.identifierType == UA_NodeIdType::UA_NODEIDTYPE_STRING
-                        && UA_String_equal(&nrrr.exp_node_id.GetRef().nodeId.identifier.string, &change_definition_browse_path_node_str)) // NOLINT(cppcoreguidelines-pro-type-union-access)
-                    {
-                        auto reference_hastypedef_id = UA_NODEID_NUMERIC(0, UA_NS0ID_HASTYPEDEFINITION);
-                        UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-                        UA_NodeId_copy(&reference_hastypedef_id, &ref_desc_cnt.GetRef().referenceTypeId);
-                        ref_desc_cnt.GetRef().nodeId = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE); // i=63 [BaseDataVariableType]
-                        ref_desc_cnt.GetRef().isForward = true;
-                        new_references.push_back(ref_desc_cnt);
-                    }
-
-                    // To test references of type HasSubtype, I add back reference of this type, since other references in the TYPE classes will be removed
-                    if (types_nodeclasses.contains(current_node_class))
-                    {
-                        MESSAGE("ADD SUBTYPE TO NODE: ", nrrr.exp_node_id.ToString(), ", class: ", types_nodeclasses.at(current_node_class));
-                        UATypesContainer<UA_ReferenceDescription> ref_desc_cnt(UA_TYPES_REFERENCEDESCRIPTION);
-                        switch (current_node_class)
-                        {
-                        case UA_NODECLASS_OBJECTTYPE:
-                            ref_desc_cnt.GetRef().nodeId = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEOBJECTTYPE); // i=58 [BaseObjectType]
-                            break;
-                        case UA_NODECLASS_VARIABLETYPE:
-                            ref_desc_cnt.GetRef().nodeId = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEVARIABLETYPE); // i=62 [BaseVariableType]
-                            break;
-                        case UA_NODECLASS_REFERENCETYPE:
-                            ref_desc_cnt.GetRef().nodeId = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_REFERENCES); // i=31 [References]
-                            break;
-                        case UA_NODECLASS_DATATYPE:
-                            ref_desc_cnt.GetRef().nodeId = UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEDATATYPE); // i=24 [BaseDataType]
-                            break;
-                        default:
-                            FAIL(true);
-                        }
-                        ref_desc_cnt.GetRef().referenceTypeId = UA_NODEID_NUMERIC(0, UA_NS0ID_HASSUBTYPE);
-                        ref_desc_cnt.GetRef().isForward = false;
-                        new_references.push_back(ref_desc_cnt);
-                        nrrr.references.push_back(ref_desc_cnt);
-                    }
-
-                    cmp_ref_descr.insert({nrrr.exp_node_id, new_references});
-                })
+                                     : _1) { nrrr.references = nodes_description.at(nrrr.exp_node_id).references.GetReferences(); })
                 .RETURN(StatusResults::Good)
-                .TIMES(AT_LEAST(2)); // This method must be called more than one time in a loop with a set number of nodes
+                .TIMES(AT_LEAST(2)); // This method should be called more than 1 time in the cycle with the established number of nodes
 
             REQUIRE_CALL(encoder, AddAliases(_)).WITH(_1.empty() == false).RETURN(StatusResults::Good).IN_SEQUENCE(seq);
             REQUIRE_CALL(encoder, End()).RETURN(StatusResults::Good).IN_SEQUENCE(seq);
 
-            NodesetExporterLoop
-                exporter_loop(std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>>{{nodes_id[0].ToString(), nodes_id}}, open, encoder, logger, parent_start_node_replacer, false);
+            NodesetExporterLoop exporter_loop(
+                std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>>{{nodes_ids[0].ToString(), nodes_ids}},
+                open,
+                encoder,
+                logger,
+                {.is_perf_timer_enable = false,
+                 .ns0_custom_nodes_ready_to_work = false,
+                 .flat_list_of_nodes = {.is_enable = false, .create_missing_start_node = false, .allow_abstract_variable = false},
+                 .parent_start_node_replacer = parent_start_node_replacer});
             exporter_loop.SetNumberOfMaxNodesToRequestData(max_nodes_to_request_data);
-            StatusResults status_result = StatusResults::Fail;
+            auto status_result = StatusResults(StatusResults::Fail);
             CHECK_NOTHROW(status_result = exporter_loop.StartExport());
-            // The number of nodes suitable for export should be equal to the number of nodes that will actually be exported
+            // The number of nodes suitable for classes for export should be equal to the number of nodes that will be actually transferred for export
             REQUIRE_EQ(number_of_valid_class_nodes_to_export, number_of_add_nodes_to_export);
-            CHECK_EQ(status_result, StatusResults::Good);
-            MESSAGE("Number of nodes: ", nodes_id.size(), ", number of nodes to be exported under incoming classes: ", number_of_add_nodes_to_export);
+            CHECK_EQ(status_result.GetStatus(), StatusResults::Good);
+            MESSAGE("Number of nodes: ", nodes_ids.size(), ", number of nodes to be exported under incoming classes: ", number_of_add_nodes_to_export);
         }
     }
 }

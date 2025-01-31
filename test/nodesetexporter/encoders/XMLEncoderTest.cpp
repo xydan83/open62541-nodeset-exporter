@@ -7,6 +7,7 @@
 //
 
 #include "nodesetexporter/encoders/XMLEncoder.h"
+#include "LogMacro.h"
 #include "XmlHelperFunctions.h"
 
 #include <open62541/types.h>
@@ -16,50 +17,16 @@
 
 namespace
 {
-using LogerBase = nodesetexporter::common::LoggerBase<std::string>;
+TEST_LOGGER_INIT
+
 using LogLevel = nodesetexporter::common::LogLevel;
 using XMLEncoder = ::nodesetexporter::encoders::XMLEncoder;
-using StatusResults = nodesetexporter::common::statuses::StatusResults;
+using StatusResults = nodesetexporter::common::statuses::StatusResults<>;
 using NodeIntermediateModel = nodesetexporter::open62541::NodeIntermediateModel;
 using ::nodesetexporter::open62541::UATypesContainer;
 using ::nodesetexporter::open62541::VariantsOfAttr;
 using tinyxml2::XMLDocument;
 
-
-class Logger final : public LogerBase
-{
-public:
-    explicit Logger(std::string&& logger_name)
-        : LoggerBase<std::string>(std::move(logger_name))
-    {
-    }
-
-private:
-    void VTrace(std::string&& message) override
-    {
-        INFO(message);
-    }
-    void VDebug(std::string&& message) override
-    {
-        INFO(message);
-    }
-    void VInfo(std::string&& message) override
-    {
-        INFO(message);
-    }
-    void VWarning(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-    void VError(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-    void VCritical(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-};
 } // namespace
 
 
@@ -415,8 +382,8 @@ TEST_SUITE("nodesetexporter::encoders")
         // The sequence of attributes, as well as nested elements, will be determined by the schema in the padding methods.
         SUBCASE("Begin() - End()")
         {
-            CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-            CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+            CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+            CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
             MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
 
             xpath = "//xmlns:UANodeSet"; // Node to be checked
@@ -438,9 +405,9 @@ TEST_SUITE("nodesetexporter::encoders")
         {
             SUBCASE("Single Output")
             {
-                CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNamespaces(namespaces), StatusResults::Good); // MAIN TEST METHOD
-                CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNamespaces(namespaces).GetStatus(), StatusResults::Good); // MAIN TEST METHOD
+                CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
                 std::string out_xml(out_test_buffer.str());
                 out_xml.erase(out_xml.rfind('\n'));
                 MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
@@ -476,10 +443,10 @@ TEST_SUITE("nodesetexporter::encoders")
 
             SUBCASE("Try to withdraw twice. The second one must be unsuccessful.")
             {
-                CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNamespaces(namespaces), StatusResults::Good); // MAIN TEST METHOD
-                CHECK_EQ(xmlEncoder.AddNamespaces(namespaces), StatusResults::Fail); // MAIN TEST METHOD
-                CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNamespaces(namespaces).GetStatus(), StatusResults::Good); // MAIN TEST METHOD
+                CHECK_EQ(xmlEncoder.AddNamespaces(namespaces).GetStatus(), StatusResults::Fail); // MAIN TEST METHOD
+                CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
                 MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
 
                 xpath = "//xmlns:NamespaceUris"; // Node to be checked
@@ -496,9 +463,9 @@ TEST_SUITE("nodesetexporter::encoders")
         {
             SUBCASE("Single Output")
             {
-                CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddAliases(aliases), StatusResults::Good); // MAIN TEST METHOD
-                CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddAliases(aliases).GetStatus(), StatusResults::Good); // MAIN TEST METHOD
+                CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
                 std::string out_xml(out_test_buffer.str());
                 out_xml.erase(out_xml.rfind('\n'));
                 MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
@@ -538,10 +505,10 @@ TEST_SUITE("nodesetexporter::encoders")
 
             SUBCASE("Try to withdraw twice. The second one must be unsuccessful.")
             {
-                CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddAliases(aliases), StatusResults::Good); // MAIN TEST METHOD
-                CHECK_EQ(xmlEncoder.AddAliases(aliases), StatusResults::Fail); // MAIN TEST METHOD
-                CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddAliases(aliases).GetStatus(), StatusResults::Good); // MAIN TEST METHOD
+                CHECK_EQ(xmlEncoder.AddAliases(aliases).GetStatus(), StatusResults::Fail); // MAIN TEST METHOD
+                CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
                 MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
 
                 xpath = "//xmlns:Aliases"; // Node to be checked
@@ -562,9 +529,9 @@ TEST_SUITE("nodesetexporter::encoders")
          */
         SUBCASE("AddNodeObject()")
         {
-            CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-            CHECK_EQ(xmlEncoder.AddNodeObject(nim_object), StatusResults::Good); // MAIN TEST METHOD
-            CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+            CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+            CHECK_EQ(xmlEncoder.AddNodeObject(nim_object).GetStatus(), StatusResults::Good); // MAIN TEST METHOD
+            CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
             std::string out_xml(out_test_buffer.str());
             out_xml.erase(out_xml.rfind('\n'));
             MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
@@ -649,9 +616,9 @@ TEST_SUITE("nodesetexporter::encoders")
          */
         SUBCASE("AddNodeObjectType()")
         {
-            CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-            CHECK_EQ(xmlEncoder.AddNodeObjectType(nim_object_type), StatusResults::Good); // MAIN TEST METHOD
-            CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+            CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+            CHECK_EQ(xmlEncoder.AddNodeObjectType(nim_object_type).GetStatus(), StatusResults::Good); // MAIN TEST METHOD
+            CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
             std::string out_xml(out_test_buffer.str());
             out_xml.erase(out_xml.rfind('\n'));
             MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
@@ -729,9 +696,9 @@ TEST_SUITE("nodesetexporter::encoders")
         {
             SUBCASE("Scalar")
             {
-                CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_scalar), StatusResults::Good); // MAIN TEST METHOD
-                CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_scalar).GetStatus(), StatusResults::Good); // MAIN TEST METHOD
+                CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
                 std::string out_xml(out_test_buffer.str());
                 out_xml.erase(out_xml.rfind('\n'));
                 MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
@@ -816,9 +783,9 @@ TEST_SUITE("nodesetexporter::encoders")
 
             SUBCASE("Array")
             {
-                CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_array), StatusResults::Good); // MAIN TEST METHOD
-                CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_array).GetStatus(), StatusResults::Good); // MAIN TEST METHOD
+                CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
                 std::string out_xml(out_test_buffer.str());
                 out_xml.erase(out_xml.rfind('\n'));
                 MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
@@ -890,9 +857,9 @@ TEST_SUITE("nodesetexporter::encoders")
          */
         SUBCASE("AddNodeVariableType()")
         {
-            CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-            CHECK_EQ(xmlEncoder.AddNodeVariableType(nim_variable_type), StatusResults::Good); // MAIN TEST METHOD
-            CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+            CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+            CHECK_EQ(xmlEncoder.AddNodeVariableType(nim_variable_type).GetStatus(), StatusResults::Good); // MAIN TEST METHOD
+            CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
             std::string out_xml(out_test_buffer.str());
             out_xml.erase(out_xml.rfind('\n'));
             MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
@@ -976,9 +943,9 @@ TEST_SUITE("nodesetexporter::encoders")
          */
         SUBCASE("AddNodeReferenceType()")
         {
-            CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-            CHECK_EQ(xmlEncoder.AddNodeReferenceType(nim_reference_type), StatusResults::Good); // MAIN TEST METHOD
-            CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+            CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+            CHECK_EQ(xmlEncoder.AddNodeReferenceType(nim_reference_type).GetStatus(), StatusResults::Good); // MAIN TEST METHOD
+            CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
             std::string out_xml(out_test_buffer.str());
             out_xml.erase(out_xml.rfind('\n'));
             MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
@@ -1070,9 +1037,9 @@ TEST_SUITE("nodesetexporter::encoders")
         // todo Finalize the DataTypeDefinition level
         SUBCASE("AddNodeDataType()")
         {
-            CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-            CHECK_EQ(xmlEncoder.AddNodeDataType(nim_data_type), StatusResults::Good); // MAIN TEST METHOD
-            CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+            CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+            CHECK_EQ(xmlEncoder.AddNodeDataType(nim_data_type).GetStatus(), StatusResults::Good); // MAIN TEST METHOD
+            CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
             std::string out_xml(out_test_buffer.str());
             out_xml.erase(out_xml.rfind('\n'));
             MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
@@ -1146,17 +1113,17 @@ TEST_SUITE("nodesetexporter::encoders")
         {
             SUBCASE("Sequential Addition")
             {
-                CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNamespaces(namespaces), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddAliases(aliases), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeObject(nim_object), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeObjectType(nim_object_type), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_scalar), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_array), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeVariableType(nim_variable_type), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeReferenceType(nim_reference_type), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeDataType(nim_data_type), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNamespaces(namespaces).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddAliases(aliases).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeObject(nim_object).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeObjectType(nim_object_type).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_scalar).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_array).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeVariableType(nim_variable_type).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeReferenceType(nim_reference_type).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeDataType(nim_data_type).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
                 std::string out_xml(out_test_buffer.str());
                 out_xml.erase(out_xml.rfind('\n'));
                 MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
@@ -1326,17 +1293,17 @@ TEST_SUITE("nodesetexporter::encoders")
 
             SUBCASE("Basic sequence elements added at the end")
             {
-                CHECK_EQ(xmlEncoder.Begin(), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeDataType(nim_data_type), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeObjectType(nim_object_type), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_scalar), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeObject(nim_object), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_array), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeReferenceType(nim_reference_type), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddAliases(aliases), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNodeVariableType(nim_variable_type), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.AddNamespaces(namespaces), StatusResults::Good);
-                CHECK_EQ(xmlEncoder.End(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.Begin().GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeDataType(nim_data_type).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeObjectType(nim_object_type).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_scalar).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeObject(nim_object).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeVariable(nim_variable_array).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeReferenceType(nim_reference_type).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddAliases(aliases).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNodeVariableType(nim_variable_type).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.AddNamespaces(namespaces).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder.End().GetStatus(), StatusResults::Good);
                 std::string out_xml(out_test_buffer.str());
                 out_xml.erase(out_xml.rfind('\n'));
                 MESSAGE(out_xml); // Output of the generated xml as a result of the encoder functions.
@@ -1509,17 +1476,17 @@ TEST_SUITE("nodesetexporter::encoders")
                 static constexpr auto filename = "nodeset_test.xml";
                 XMLEncoder xmlEncoder_save_to_file(logger, filename);
 
-                CHECK_EQ(xmlEncoder_save_to_file.Begin(), StatusResults::Good);
-                CHECK_EQ(xmlEncoder_save_to_file.AddNodeDataType(nim_data_type), StatusResults::Good);
-                CHECK_EQ(xmlEncoder_save_to_file.AddNodeObjectType(nim_object_type), StatusResults::Good);
-                CHECK_EQ(xmlEncoder_save_to_file.AddNodeVariable(nim_variable_scalar), StatusResults::Good);
-                CHECK_EQ(xmlEncoder_save_to_file.AddNodeObject(nim_object), StatusResults::Good);
-                CHECK_EQ(xmlEncoder_save_to_file.AddNamespaces(namespaces), StatusResults::Good);
-                CHECK_EQ(xmlEncoder_save_to_file.AddNodeReferenceType(nim_reference_type), StatusResults::Good);
-                CHECK_EQ(xmlEncoder_save_to_file.AddNodeVariableType(nim_variable_type), StatusResults::Good);
-                CHECK_EQ(xmlEncoder_save_to_file.AddAliases(aliases), StatusResults::Good);
-                CHECK_EQ(xmlEncoder_save_to_file.AddNodeVariable(nim_variable_array), StatusResults::Good);
-                CHECK_EQ(xmlEncoder_save_to_file.End(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder_save_to_file.Begin().GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder_save_to_file.AddNodeDataType(nim_data_type).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder_save_to_file.AddNodeObjectType(nim_object_type).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder_save_to_file.AddNodeVariable(nim_variable_scalar).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder_save_to_file.AddNodeObject(nim_object).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder_save_to_file.AddNamespaces(namespaces).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder_save_to_file.AddNodeReferenceType(nim_reference_type).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder_save_to_file.AddNodeVariableType(nim_variable_type).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder_save_to_file.AddAliases(aliases).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder_save_to_file.AddNodeVariable(nim_variable_array).GetStatus(), StatusResults::Good);
+                CHECK_EQ(xmlEncoder_save_to_file.End().GetStatus(), StatusResults::Good);
                 MESSAGE(out_test_buffer.str()); // Output of the generated xml as a result of the encoder functions.
 
                 xmlpp::DomParser file_parser;

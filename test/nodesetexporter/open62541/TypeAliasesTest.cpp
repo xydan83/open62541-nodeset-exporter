@@ -78,9 +78,8 @@ TEST_SUITE("nodesetexporter::open62541")
 
         SUBCASE("UATypesContainer<UA_NodeId> integer")
         {
-
-            auto test = UATypesContainer<UA_NodeId>(UA_TYPES_NODEID);
-            UA_NodeId_parse(&test.GetRef(), UA_String_fromChars("ns=1;i=100"));
+            UATypesContainer<UA_NodeId> test(UA_TYPES_NODEID);
+            test.SetParamFromString("ns=1;i=100");
             const auto test_type = VariantsOfAttr(test);
             std::string test_str;
             CHECK_NOTHROW(test_str = VariantsOfAttrToString(test_type));
@@ -90,9 +89,8 @@ TEST_SUITE("nodesetexporter::open62541")
 
         SUBCASE("UATypesContainer<UA_NodeId> string")
         {
-
-            auto test = UATypesContainer<UA_NodeId>(UA_TYPES_NODEID);
-            UA_NodeId_parse(&test.GetRef(), UA_String_fromChars("ns=1;s=Test string"));
+            UATypesContainer<UA_NodeId> test(UA_TYPES_NODEID);
+            test.SetParamFromString("ns=1;s=Test string");
             const auto test_type = VariantsOfAttr(test);
             std::string test_str;
             CHECK_NOTHROW(test_str = VariantsOfAttrToString(test_type));
@@ -102,9 +100,8 @@ TEST_SUITE("nodesetexporter::open62541")
 
         SUBCASE("UATypesContainer<UA_NodeId> byte string")
         {
-
-            auto test = UATypesContainer<UA_NodeId>(UA_TYPES_NODEID);
-            UA_NodeId_parse(&test.GetRef(), UA_String_fromChars("ns=1;b=Test string"));
+            UATypesContainer<UA_NodeId> test(UA_TYPES_NODEID);
+            test.SetParamFromString("ns=1;b=Test string");
             const auto test_type = VariantsOfAttr(test);
             std::string test_str;
             CHECK_NOTHROW(test_str = VariantsOfAttrToString(test_type));
@@ -114,9 +111,8 @@ TEST_SUITE("nodesetexporter::open62541")
 
         SUBCASE("UATypesContainer<UA_NodeId> guid")
         {
-
-            auto test = UATypesContainer<UA_NodeId>(UA_TYPES_NODEID);
-            UA_NodeId_parse(&test.GetRef(), UA_String_fromChars("ns=1;g=0097b8ca-2453-406d-bd4f-8a5acb2a1bf2"));
+            UATypesContainer<UA_NodeId> test(UA_TYPES_NODEID);
+            test.SetParamFromString("ns=1;g=0097b8ca-2453-406d-bd4f-8a5acb2a1bf2");
             const auto test_type = VariantsOfAttr(test);
             std::string test_str;
             CHECK_NOTHROW(test_str = VariantsOfAttrToString(test_type));
@@ -180,6 +176,7 @@ TEST_SUITE("nodesetexporter::open62541")
             CHECK_NOTHROW(test_str = VariantsOfAttrToString(test_type));
             CHECK_FALSE(test_str.empty());
             MESSAGE(test_str);
+            UA_Int16_delete(some_scalar);
         }
 
         SUBCASE("std::vector<UA_UInt32>>")
@@ -361,7 +358,7 @@ TEST_SUITE("nodesetexporter::open62541")
             some_array[1] = 12434; // NOLINT
             size_t sz = 2; // NOLINT
             // Second option (append-resize)
-            auto* some_scalar = UA_Int16_new();
+            auto* some_scalar = UA_Int32_new();
             *some_scalar = 24436; // NOLINT
             CHECK(UA_StatusCode_isGood(UA_Array_append(reinterpret_cast<void**>(&some_array), &sz, some_scalar, &UA_TYPES[UA_TYPES_UINT32])));
             UA_Variant_setArray(&test_type.GetRef(), some_array, sz, &UA_TYPES[UA_TYPES_UINT32]);
@@ -374,6 +371,7 @@ TEST_SUITE("nodesetexporter::open62541")
             {
                 CHECK_EQ(static_cast<UA_UInt32*>(test_type.GetRef().data)[index], res.at(index));
             }
+            UA_Int32_delete(some_scalar);
         }
 
         SUBCASE("UATypesContainer<UA_StructureDefinition>")

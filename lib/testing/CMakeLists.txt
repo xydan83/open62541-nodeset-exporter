@@ -15,6 +15,8 @@ target_sources(
         ${PROJECT_NAME}
         PRIVATE
         src/main.cpp
+        PUBLIC
+        include/LogMacro.h
 )
 target_include_directories(
         ${PROJECT_NAME}

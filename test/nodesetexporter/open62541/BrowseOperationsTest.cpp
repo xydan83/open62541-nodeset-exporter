@@ -7,6 +7,7 @@
 //
 
 #include "nodesetexporter/open62541/BrowseOperations.h"
+#include "LogMacro.h"
 #include "nodesetexporter/common/LoggerBase.h"
 #include "nodesetexporter/common/Statuses.h"
 #include "nodesetexporter/logger/LogPlugin.h"
@@ -19,56 +20,36 @@
 
 #include <doctest/doctest.h>
 
+#include <condition_variable>
 #include <iostream>
 #include <thread>
 #include <vector>
 
 namespace
 {
-using LogerBase = nodesetexporter::common::LoggerBase<std::string>;
+TEST_LOGGER_INIT
+
 using LoggerPlugin = nodesetexporter::logger::Open62541LogPlugin;
-using nodesetexporter::common::statuses::StatusResults;
+using StatusResults = ::nodesetexporter::common::statuses::StatusResults<>;
 using nodesetexporter::open62541::UATypesContainer;
 using nodesetexporter::open62541::browseoperations::GrabChildNodeIdsFromStartNodeId;
+using namespace std::literals;
 
-std::atomic_bool running = true; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-
-class Logger final : public LogerBase
-{
-public:
-    explicit Logger(std::string&& logger_name)
-        : LoggerBase<std::string>(std::move(logger_name))
-    {
-    }
-
-private:
-    void VTrace(std::string&& message) override
-    {
-        INFO(message);
-    }
-    void VDebug(std::string&& message) override
-    {
-        INFO(message);
-    }
-    void VInfo(std::string&& message) override
-    {
-        INFO(message);
-    }
-    void VWarning(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-    void VError(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-    void VCritical(std::string&& message) override
-    {
-        MESSAGE(message);
-    }
-};
+constexpr auto SERVER_START_TIMEOUT = 10s;
+volatile std::atomic_bool running = true; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+std::condition_variable cv_server_started; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+std::mutex cv_mutex; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 // Preparing a test server to which the client will connect
+// NOLINTBEGIN(cppcoreguidelines-macro-usage)
+#define CHECK_ERR(res)                                                                                                                                                                                 \
+    if (UA_StatusCode_isBad((res)))                                                                                                                                                                    \
+    {                                                                                                                                                                                                  \
+        MESSAGE("OPC Server has bad status code: ", UA_StatusCode_name((res)));                                                                                                                        \
+        REQUIRE(UA_StatusCode_isGood((res)));                                                                                                                                                          \
+    }
+// NOLINTEND(cppcoreguidelines-macro-usage)
+
 auto OpcUaServerStart()
 {
     return std::thread(
@@ -89,24 +70,42 @@ auto OpcUaServerStart()
             auto retval = UA_ServerConfig_setDefault(&config);
             REQUIRE_EQ(retval, UA_STATUSCODE_GOOD);
             auto* server = UA_Server_newWithConfig(&config);
-            MESSAGE(std::string(UA_StatusCode_name(retval)));
-            REQUIRE(UA_StatusCode_isGood(retval));
-            REQUIRE(UA_StatusCode_isGood(ex_nodeset(server))); // TEST NODESET LOADER (HARDCODE)
-            REQUIRE(UA_StatusCode_isGood(UA_Server_run(server, reinterpret_cast<volatile const bool*>(&running)))); // NOLINT
+            REQUIRE_NE(server, nullptr);
+            CHECK_ERR(ex_nodeset(server)); // TEST NODESET LOADER (HARDCODE)
+            uint64_t callback_id = 0;
+            CHECK_ERR(UA_Server_addTimedCallback(
+                server,
+                [](UA_Server* /*server*/, void*)
+                {
+                    std::lock_guard<std::mutex> locker(cv_mutex);
+                    cv_server_started.notify_all();
+                },
+                nullptr,
+                1000,
+                &callback_id));
+            CHECK_ERR(UA_Server_run(server, reinterpret_cast<volatile const bool*>(&running))); // NOLINT
+            UA_Server_removeRepeatedCallback(server, callback_id);
+#ifdef OPEN62541_VER_1_3
             UA_Server_delete(server);
+#elif defined(OPEN62541_VER_1_4)
+            CHECK_ERR(UA_Server_delete(server));
+#endif
             MESSAGE("Server down.");
         });
 }
 
 } // namespace
 
-TEST_SUITE("nodesetexporter::open62541")
+TEST_SUITE("idsmart::connector::nodesetexporter::open62541")
 {
-    TEST_CASE("nodesetexporter::open62541::browseoperations") // NOLINT
+    TEST_CASE("idsmart::connector::nodesetexporter::open62541::browseoperations") // NOLINT
     {
+        std::unique_lock<std::mutex> locker(cv_mutex);
         running = true;
         auto server_thread = OpcUaServerStart();
-        sleep(1);
+        const std::chrono::time_point<std::chrono::system_clock> server_start_timeout = std::chrono::system_clock::now() + SERVER_START_TIMEOUT;
+        REQUIRE_EQ(cv_server_started.wait_until(locker, server_start_timeout), std::cv_status::no_timeout); // Ожидаю старта Сервера
+        locker.unlock();
         auto* client = UA_Client_new();
         auto* cli_config = UA_Client_getConfig(client);
         Logger cli_logger("client-test");
@@ -126,7 +125,7 @@ TEST_SUITE("nodesetexporter::open62541")
             {
                 auto startNodeId = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID);
                 std::vector<UATypesContainer<UA_ExpandedNodeId>> out;
-                CHECK_EQ(GrabChildNodeIdsFromStartNodeId(client, startNodeId, out), StatusResults::Good);
+                CHECK_EQ(GrabChildNodeIdsFromStartNodeId(client, startNodeId, out).GetStatus(), StatusResults::Good);
                 CHECK_NE(out.size(), 0);
                 CHECK_EQ(out.size(), 43);
 
@@ -157,5 +156,6 @@ TEST_SUITE("nodesetexporter::open62541")
                 server_thread.join();
             }
         }
+        sleep(1);
     }
 }
