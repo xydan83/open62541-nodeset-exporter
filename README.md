@@ -47,7 +47,8 @@ Planned:
 ⭕ Collect and export all custom data types \
 ⭕ Support for exporting Values in Variable and VariableType class nodes \
 ⭕ Exporting UAView \
-⭕ Windows build support
+⭕ Windows build support \
+⭕ More unit tests
 
 ❌ UAMethods is not exported because we can't move the code \
 ❌ Nodes and types ns=0 are not exported (except custom nodes in ns=0 (**optional**))
