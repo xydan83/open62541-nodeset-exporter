@@ -14,8 +14,7 @@ attributes, types, etc.
 The exported node structure can be loaded onto another server, for example, using
 another [NodesetLoader](https://github.com/open62541/open62541-nodeset-loader) project.
 
-The library does not currently support exporting node values and exporting custom types. All this is planned for
-implementation.
+The library does not currently support exporting custom types. This is planned for implementation.
 
 The build for Windows has not been tested and is not supported but is planned for implementation.
 
