@@ -8,9 +8,11 @@
   <Aliases>
     <Alias Alias="Boolean">i=1</Alias>
     <Alias Alias="Int32">i=6</Alias>
+    <Alias Alias="UInt32">i=7</Alias>
     <Alias Alias="Int64">i=8</Alias>
     <Alias Alias="Double">i=11</Alias>
     <Alias Alias="String">i=12</Alias>
+    <Alias Alias="DateTime">i=13</Alias>
     <Alias Alias="Organizes">i=35</Alias>
     <Alias Alias="HasTypeDefinition">i=40</Alias>
     <Alias Alias="HasProperty">i=46</Alias>
@@ -29,6 +31,9 @@
       <Reference ReferenceType="HasComponent">ns=1;i=4</Reference>
       <Reference ReferenceType="HasComponent">ns=1;i=5</Reference>
       <Reference ReferenceType="HasComponent">ns=1;i=22</Reference>
+      <Reference ReferenceType="HasComponent">ns=1;i=33</Reference>
+      <Reference ReferenceType="HasComponent">ns=1;i=34</Reference>
+      <Reference ReferenceType="HasComponent">ns=1;i=35</Reference>
       <Reference ReferenceType="Organizes">ns=1;i=21</Reference>
       <Reference ReferenceType="Organizes">ns=1;i=23</Reference>
       <Reference ReferenceType="Organizes">ns=1;i=24</Reference>
@@ -435,6 +440,48 @@
       <Reference ReferenceType="HasSubtype" IsForward="false">i=33</Reference>
     </References>
   </UAReferenceType>
+  <UAVariable NodeId="ns=1;i=33" BrowseName="1:datetime_test" ParentNodeId="ns=1;i=1" DataType="DateTime">
+    <DisplayName>date time</DisplayName>
+    <Description>Description date time</Description>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+    </References>
+    <Value>
+      <uax:DateTime>2024-11-13T16:12:55.710Z</uax:DateTime>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=34" BrowseName="1:UInt32List_test" ParentNodeId="ns=1;i=1" DataType="UInt32" ValueRank="1" ArrayDimensions="3">
+    <DisplayName>UInt32 list</DisplayName>
+    <Description>Description Uint32 list</Description>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+    </References>
+    <Value>
+      <uax:ListOfUInt32>
+        <uax:UInt32>21433</uax:UInt32>
+        <uax:UInt32>121433</uax:UInt32>
+        <uax:UInt32>8423</uax:UInt32>
+      </uax:ListOfUInt32>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=35" BrowseName="1:UInt32List_strings" ParentNodeId="ns=1;i=1" DataType="String" ValueRank="1" ArrayDimensions="4">
+    <DisplayName>String list</DisplayName>
+    <Description>Description String list</Description>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+    </References>
+    <Value>
+      <uax:ListOfString>
+        <uax:String>21433</uax:String>
+        <uax:String>test 1</uax:String>
+        <uax:String>test 2</uax:String>
+      <uax:String>Тест русской локали 3</uax:String>
+      </uax:ListOfString>
+    </Value>
+  </UAVariable>
   <UAObject NodeId="ns=2;i=100" BrowseName="2:vPLC2" ParentNodeId="i=85">
     <DisplayName>vPLC2</DisplayName>
     <Description>Description. Testing multiple start nodes.</Description>

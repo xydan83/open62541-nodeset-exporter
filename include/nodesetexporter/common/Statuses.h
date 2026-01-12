@@ -21,14 +21,14 @@ template <class TReserveCodeType = int64_t>
 class StatusResults
 {
 public:
-    enum Status
+    enum Status : uint8_t
     {
         Good,
         Fail
     };
 
     // todo Detail the list on problems
-    enum SubStatus
+    enum SubStatus : uint8_t
     {
         No,
         FailedCheckNs0StartNodes, // An error in checking the starting assemblies for the ability to work with NS = 0 space.

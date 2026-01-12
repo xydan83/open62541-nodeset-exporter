@@ -58,32 +58,43 @@ using StatusResults = nodesetexporter::common::statuses::StatusResults<int64_t>;
 
 /**
  * @brief Additional export options
- * @param logger External logging object. If absent, the internal standard output mechanism will be used. [optional]
- * @param number_of_max_nodes_to_request_data The maximum number of nodes for which data must be received from the server in one request. Default - no limit [optional]
+* @param logger External logging object. If absent, the internal standard output mechanism will be used. [optional]
+ * @param max_references_per_node The maximum number of references returned for each starting node specified in the request.
+ * If specified when requesting Browsing, no more than the specified number of links is returned to obtain the rest
+ * links will use the BrowseNext operation.
+ * @param max_nodes_per_browse The maximum number of nodes that can be transferred to the server in one Browse operation request.
+ * If the specified limit is exceeded, the request is divided into the required number of Browse operations.
+ * @param max_browse_continuation_points The maximum number of possible continuation points (continuation_points) during the Browse and BrowseNext operation.
+ * Each link request from one NodeID is equal to one continuation_points.
+ * The set of NodeIDs must be limited by this parameter per request.
+ * @param max_nodes_per_read The maximum number of nodes for which data must be received from the server in one request.
  * @param encoder_types The upload encoding type. By default, XML encoding is used. [optional]
- * @param internal_log_level The logging level of the internal logging engine. The default is Info level. [optional]
- * @param parent_start_node_replacer ID of the node that will be substituted as the main parent for the start node if the parent of the start node is not ns=0;i=85.
- *                                   By default, the parent of the starting node will be the node with NodeId i=85.
- *                                   For encoder_types XML, both the ParentNodeID and the reference to the main parent are changed. [optional]
- * @param perf_counter_enable Enable performance counters and output the results to the log. The result is displayed in the Info level mode. [optional]
- * @param ns0_custom_nodes_ready_to_work Export user nodes located in the standard OPC UA space (ns=0). [optionally] [experimental]
- * @param flat_list_of_nodes__is_enable Generate a flat list of nodes linked to a single start node. All related links between nodes are deleted. The Objects [i=85] node from the
- *                                      standard OPC UA space can be specified as a start node. All other nodes of the standard are prohibited.
- *                                      If the specified start node is missing on the server and the "flat_list_of_nodes__create_missing_start_node" parameter is disabled,
- *                                      an export error will be returned.
- *                                      [optionally] [experimental]
- * @param flat_list_of_nodes__create_missing_start_node Works in conjunction only with the activated parameter "flat_list_of_nodes__is_enable". In case of activation, if the starting node does
- *                                                      not exist (an error will occur when trying to collect data from it), then such a node will be created as the "Object" class and bound to
- *                                                      the parent node specified in the "parent_start_node_replacer" parameter.
- *                                                      If all other node lists have one non-existent node, then such lists will all be bound to one created node. [optionally] [experimental]
- * @param flat_list_of_nodes__allow_abstract_variable Works in conjunction with "flat_list_of_nodes__create_missing_start_node" and "flat_list_of_nodes__is_enable".
- *                                                    When enabled, adding two backlinks of type "HasComponent" to nodes 'i=63" and "i=58" thus allows using nodes of class
- *                                                    "Variable" of abstract type. [optionally] [experimental]
+* @param internal_log_level The logging level of the internal logging engine. The default is Info level. [optional]
+* @param parent_start_node_replacer ID of the node that will be substituted as the main parent for the start node if the parent of the start node is not ns=0;i=85.
+*                                   By default, the parent of the starting node will be the node with NodeId i=85.
+*                                   For encoder_types XML, both the ParentNodeID and the reference to the main parent are changed. [optional]
+* @param perf_counter_enable Enable performance counters and output the results to the log. The result is displayed in the Info level mode. [optional]
+* @param ns0_custom_nodes_ready_to_work Export user nodes located in the standard OPC UA space (ns=0). [optionally] [experimental]
+* @param flat_list_of_nodes__is_enable Generate a flat list of nodes linked to a single start node. All related links between nodes are deleted. The Objects [i=85] node from the
+*                                      standard OPC UA space can be specified as a start node. All other nodes of the standard are prohibited.
+*                                      If the specified start node is missing on the server and the "flat_list_of_nodes__create_missing_start_node" parameter is disabled,
+*                                      an export error will be returned.
+*                                      [optionally] [experimental]
+* @param flat_list_of_nodes__create_missing_start_node Works in conjunction only with the activated parameter "flat_list_of_nodes__is_enable". In case of activation, if the starting node does
+*                                                      not exist (an error will occur when trying to collect data from it), then such a node will be created as the "Object" class and bound to
+*                                                      the parent node specified in the "parent_start_node_replacer" parameter.
+*                                                      If all other node lists have one non-existent node, then such lists will all be bound to one created node. [optionally] [experimental]
+* @param flat_list_of_nodes__allow_abstract_variable Works in conjunction with "flat_list_of_nodes__create_missing_start_node" and "flat_list_of_nodes__is_enable".
+*                                                    When enabled, adding two backlinks of type "HasComponent" to nodes 'i=63" and "i=58" thus allows using nodes of class
+*                                                    "Variable" of abstract type. [optionally] [experimental]
  */
 struct Options
 {
     std::optional<std::reference_wrapper<LoggerBase>> logger = std::nullopt;
-    u_int32_t number_of_max_nodes_to_request_data = 0;
+    std::uint32_t max_references_per_node = 0;
+    std::uint32_t max_nodes_per_browse = 0;
+    std::uint16_t max_browse_continuation_points = 0;
+    std::uint32_t max_nodes_per_read = 0;
     EncoderTypes encoder_types = EncoderTypes::XML;
     LogLevel internal_log_level = LogLevel::Info;
     ExpandedNodeId parent_start_node_replacer = ExpandedNodeId(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER), UA_TYPES_EXPANDEDNODEID);
@@ -125,15 +136,12 @@ StatusResults DLL_PUBLIC ExportNodeset(
  * @param opt Additional export mode options. [optional]
  * @return Function execution status.
  */
-static StatusResults DLL_PUBLIC ExportNodesetFromServer(
+StatusResults DLL_PUBLIC ExportNodesetFromServer(
     UA_Server& open62541_object,
     const std::map<std::string, std::vector<ExpandedNodeId>>& node_ids,
     std::string&& filename,
     std::optional<std::reference_wrapper<std::iostream>> out_buffer = std::nullopt,
-    const Options& opt = Options()) noexcept
-{
-    return ExportNodeset<UA_Server>(open62541_object, node_ids, std::move(filename), out_buffer, opt);
-}
+    const Options& opt = Options()) noexcept;
 
 
 /**
@@ -145,15 +153,12 @@ static StatusResults DLL_PUBLIC ExportNodesetFromServer(
  * @param opt Additional export mode options. [optional]
  * @return Function execution status.
  */
-static StatusResults DLL_PUBLIC ExportNodesetFromClient( // NOLINT(misc-definitions-in-headers)
+StatusResults DLL_PUBLIC ExportNodesetFromClient(
     UA_Client& open62541_object,
     const std::map<std::string, std::vector<ExpandedNodeId>>& node_ids,
     std::string&& filename,
     std::optional<std::reference_wrapper<std::iostream>> out_buffer = std::nullopt,
-    const Options& opt = Options()) noexcept
-{
-    return ExportNodeset<UA_Client>(open62541_object, node_ids, std::move(filename), out_buffer, opt);
-}
+    const Options& opt = Options()) noexcept;
 
 } // namespace nodesetexporter
 

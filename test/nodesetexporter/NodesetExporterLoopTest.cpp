@@ -9,6 +9,7 @@
 
 #include "nodesetexporter/NodesetExporterLoop.h"
 #include "LogMacro.h"
+#include "nodesetexporter/common/v_1.3_Compatibility.h"
 #include "nodesetexporter/open62541/UATypesContainer.h"
 
 #include <open62541/types.h>
@@ -27,6 +28,7 @@ using nodesetexporter::VariantsOfAttr;
 using nodesetexporter::interfaces::IEncoder;
 using nodesetexporter::interfaces::IOpen62541;
 using StatusResults = nodesetexporter::common::statuses::StatusResults<>;
+using nodesetexporter::open62541::typealiases::MultidimensionalArray;
 
 namespace
 {
@@ -69,8 +71,9 @@ public:
     }
     IMPLEMENT_MOCK1(ReadNodeClasses);
     IMPLEMENT_MOCK1(ReadNodeReferences);
-    IMPLEMENT_MOCK1(ReadNodesAttributes);
+    IMPLEMENT_MOCK2(ReadNodesAttributes);
     IMPLEMENT_MOCK2(ReadNodeDataValue);
+    IMPLEMENT_MOCK1(SetRequestedMaxReferencesPerNode);
 };
 
 /**
@@ -201,7 +204,7 @@ struct NodeDescription
         }
         void SetArrayDimmension(std::vector<uint32_t>&& arr_dim)
         {
-            m_array_dimension = std::move(arr_dim);
+            m_array_dimension.SetArray({}, std::move(arr_dim));
         }
         void SetValueScalar(int64_t value)
         {
@@ -247,7 +250,7 @@ struct NodeDescription
                 enum_def.GetRef().fieldsSize = 1;
                 auto enum_f = UATypesContainer<UA_EnumField>(UA_TYPES_ENUMFIELD);
                 enum_def.GetRef().fields = &enum_f.GetRef();
-                UA_String name = UA_STRING_ALLOC("Test enum");
+                const UA_String name = UA_STRING_ALLOC("Test enum");
                 UA_String_copy(&name, &enum_def.GetRef().fields->name);
                 enum_def.GetRef().fields->value = scalar;
                 UA_Variant_setScalar(&scalar_value.GetRef(), &enum_def.GetRef(), &UA_TYPES[UA_TYPES_ENUMDEFINITION]);
@@ -260,7 +263,7 @@ struct NodeDescription
                 str_def.GetRef().baseDataType = UA_NODEID_NUMERIC(0, 8);
                 auto str_f = UATypesContainer<UA_StructureField>(UA_TYPES_STRUCTUREFIELD);
                 str_def.GetRef().fields = &str_f.GetRef();
-                UA_String name = UA_STRING_ALLOC("Test struct");
+                const UA_String name = UA_STRING_ALLOC("Test struct");
                 UA_String_copy(&name, &str_def.GetRef().fields->name);
                 UA_Variant_setScalar(&scalar_value.GetRef(), &str_def.GetRef(), &UA_TYPES[UA_TYPES_STRUCTUREDEFINITION]);
                 break;
@@ -331,7 +334,7 @@ struct NodeDescription
         UA_Boolean m_is_abstract{};
         UATypesContainer<UA_NodeId> m_data_type = UATypesContainer<UA_NodeId>(UA_TYPES_NODEID);
         UA_Int32 m_value_rank = 0;
-        std::vector<UA_UInt32> m_array_dimension;
+        MultidimensionalArray<UA_UInt32> m_array_dimension;
         UATypesContainer<UA_Variant> scalar_value = UATypesContainer<UA_Variant>(UA_TYPES_VARIANT);
         UA_Byte m_access_level = 0;
         UA_Byte m_user_access_level = 0;
@@ -358,8 +361,9 @@ struct NodeDescription
         }
         void SetNodeId(const std::string& node_id)
         {
-            const auto node_id_tmp = UA_EXPANDEDNODEID(node_id.data());
+            auto node_id_tmp = UA_EXPANDEDNODEID(node_id.data());
             UA_ExpandedNodeId_copy(&node_id_tmp, &m_reference.GetRef().nodeId);
+            UA_ExpandedNodeId_clear(&node_id_tmp);
         }
         void SetBrowseName(u_int16_t ns, std::string browse_name)
         {
@@ -420,7 +424,6 @@ struct NodeDescription
 TEST_SUITE("nodesetexporter")
 {
     const auto parent_start_node_replacer = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER), UA_TYPES_EXPANDEDNODEID);
-    const auto max_nodes_to_request_data = 5; // The number of nodes in the package for the core test indicating the limit for a single data request
 
     // Classes / text names.
     const std::map<std::uint32_t, std::string> types_nodeclasses{
@@ -447,7 +450,7 @@ TEST_SUITE("nodesetexporter")
         constexpr size_t namespace_array_size = 3;
 
         // Set namespace
-        UATypesContainer<UA_ExpandedNodeId> server_namespace_array_request(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_SERVER_NAMESPACEARRAY), UA_TYPES_EXPANDEDNODEID);
+        const UATypesContainer<UA_ExpandedNodeId> server_namespace_array_request(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_SERVER_NAMESPACEARRAY), UA_TYPES_EXPANDEDNODEID);
         std::vector<std::string> valid_namespaces{"http://some_opc_server/UA/", "http://some_devices/UA/"};
         auto* namespace_array = static_cast<UA_String*>(UA_Array_new(namespace_array_size, &UA_TYPES[UA_TYPES_STRING]));
         namespace_array[0] = UA_String_fromChars("http://opcfoundation.org/UA/"); // NOLINT
@@ -455,11 +458,10 @@ TEST_SUITE("nodesetexporter")
         namespace_array[2] = UA_String_fromChars(valid_namespaces[1].c_str()); // NOLINT
 
         // Prepare test nodes
-        std::vector<UATypesContainer<UA_ExpandedNodeId>> nodes_ids; // They are passed to the input of the kernel.
-        std::map<UATypesContainer<UA_ExpandedNodeId>, NodeDescription> nodes_description; // Used to describe node classes in MOCK methods of the Open62541 interface.
-        std::map<UATypesContainer<UA_ExpandedNodeId>, NodeDescription>
-            cmp_ref_descr; // The output test comparative model of the structure of the nodes, taking into account all the changes made by the core.
-        std::set<UATypesContainer<UA_ExpandedNodeId>> valid_node_id; // Valid node_ids for operation are used to filter test references.
+        std::vector<UATypesContainer<UA_ExpandedNodeId>> nodes_ids; // Передаются на вход ядру.
+        std::map<UATypesContainer<UA_ExpandedNodeId>, NodeDescription> nodes_description; // Используются для заполнения описания узлов
+        std::map<UATypesContainer<UA_ExpandedNodeId>, NodeDescription> cmp_ref_descr; // Выходная тестовая сравнительная модель структуры узлов с учетом всех изменений, производимых ядром.
+        std::set<UATypesContainer<UA_ExpandedNodeId>> valid_node_id; // Валидные для работы node_id, используются для фильтрации тестовых ссылок.
 
         // Adding nodes
         // NODE ns=2;i=100 - Root node tied to Objects
@@ -472,7 +474,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description vPLC1");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         // Ref1 - Type
@@ -519,7 +521,7 @@ TEST_SUITE("nodesetexporter")
 // todo In some of early version 1.3.x library has a problem with bytestring.
 //  Need to find this version, but now - just change node type if we use 1.3.x.
 #ifdef OPEN62541_VER_1_4
-        node_desc->references.SetNodeId("ns=4;b=ByteStringNode");
+        node_desc->references.SetNodeId("ns=4;b=Qnl0ZVN0cmluZ05vZGU=");
 #elif defined(OPEN62541_VER_1_3)
         node_desc->references.SetNodeId("ns=4;s=ByteStringNode");
 #endif
@@ -530,8 +532,17 @@ TEST_SUITE("nodesetexporter")
         node_desc->references.SetBrowseName(0, "byte string");
         node_desc->references.AddReferenceToVector();
         nodes_description[nodes_ids.back()] = *node_desc;
+        // Ref 7 - Direct reference to a node with incorrect HasTypeDefinition references
+        node_desc->references.SetNodeId("ns=2;s=vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECT);
+        node_desc->references.SetDisplayName("en", "HasTypeDefinition fix test");
+        node_desc->references.SetBrowseName(0, "HasTypeDefinition fix test");
+        node_desc->references.AddReferenceToVector();
+        nodes_description[nodes_ids.back()] = *node_desc;
 
-        // NODE ns=4;b=ByteStringNode= - A variable node tied to the node of the object (root)
+        // NODE ns=4;b=Qnl0ZVN0cmluZ05vZGU= - A variable node tied to the node of the object (root)
         node_desc = std::make_unique<NodeDescription>();
 #ifdef OPEN62541_VER_1_4
         nodes_ids.emplace_back(UA_EXPANDEDNODEID_BYTESTRING(4, "ByteStringNode"), UA_TYPES_EXPANDEDNODEID);
@@ -545,7 +556,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description byte string");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetDataType("i=11");
@@ -582,7 +593,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description temperature");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetDataType("i=11");
@@ -642,7 +653,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description method");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         // Ref1 - Reverse reference
@@ -673,7 +684,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description pressure");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetDataType("i=11");
@@ -709,7 +720,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description Test node 1");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetDataType("i=12");
@@ -746,7 +757,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description Test node 2");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetDataType("i=12");
@@ -807,7 +818,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description Union");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetIsAbstract(true);
@@ -839,7 +850,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description SomeReferences_test");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetIsAbstract(false);
@@ -873,7 +884,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description DataTypeDescriptionType_test");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetIsAbstract(false);
@@ -925,7 +936,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description FolderType_test");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetIsAbstract(false);
@@ -956,7 +967,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description View test");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetIsAbstract(false);
@@ -984,7 +995,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description vPLC1.Test_node_2.BrowsePathTest");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetIsAbstract(false);
@@ -1024,7 +1035,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description vPLC1.Test_node_2.BrowsePathTest.Browse2");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetDataType("i=12");
@@ -1053,7 +1064,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description vPLC1.Test_node_2._Statistics");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetIsAbstract(false);
@@ -1077,7 +1088,7 @@ TEST_SUITE("nodesetexporter")
         node_desc->attributes.SetDescription("en", "Description vPLC1.Test_node_2.BrowsePathTest.Browse3");
         node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
         node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
-        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVEL);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
         node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
         node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
         node_desc->attributes.SetDataType("i=12");
@@ -1093,6 +1104,103 @@ TEST_SUITE("nodesetexporter")
         node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLETYPE);
         node_desc->references.SetDisplayName("en", "BaseVariableType");
         node_desc->references.SetBrowseName(0, "BaseVariableType");
+        node_desc->references.AddReferenceToVector();
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // Node ns=2;s=vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix - check for a node that will have backlinks of type HasTypeDefinition and there will be more than one of them
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix"), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_OBJECT;
+        node_desc->attributes.SetBrowseName(1, "vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix");
+        node_desc->attributes.SetDisplayName("en", "vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix");
+        node_desc->attributes.SetDescription("en", "Description vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetIsAbstract(false);
+        // Ref1 - type
+        node_desc->references.SetNodeId("i=61");
+        node_desc->references.SetIsForward(false); // У такой ссылки всегда должен быть True
+        node_desc->references.SetReferenceTypeId("i=40"); // HasTypeDefinition
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECTTYPE);
+        node_desc->references.SetDisplayName("en", "FolderType");
+        node_desc->references.SetBrowseName(0, "FolderType");
+        node_desc->references.AddReferenceToVector();
+        // Ref2 - type (which should not exist. There should always be one type)
+        node_desc->references.SetNodeId("vPLC1.Test_node_2.BrowsePathTest.Browse2");
+        node_desc->references.SetIsForward(false); // У такой ссылки всегда должен быть True
+        node_desc->references.SetReferenceTypeId("i=40"); // HasTypeDefinition
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECTTYPE);
+        node_desc->references.SetDisplayName("en", "Incorrect");
+        node_desc->references.SetBrowseName(0, "Incorrect");
+        node_desc->references.AddReferenceToVector(true);
+        // Ref3 - type (which should not exist. There should always be one type)
+        node_desc->references.SetNodeId("ns=2;s=vPLC1.Test_node_2.BrowsePathTest.Browse3");
+        node_desc->references.SetIsForward(false); // У такой ссылки всегда должен быть True
+        node_desc->references.SetReferenceTypeId("i=40"); // HasTypeDefinition
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECTTYPE);
+        node_desc->references.SetDisplayName("en", "Incorrect");
+        node_desc->references.SetBrowseName(0, "Incorrect");
+        node_desc->references.AddReferenceToVector(true);
+        // Ref4 - type (which should not exist. There should always be one type)
+#ifdef OPEN62541_VER_1_4
+        node_desc->references.SetNodeId("ns=4;b=Qnl0ZVN0cmluZ05vZGU=");
+#elif defined(OPEN62541_VER_1_3)
+        node_desc->references.SetNodeId("ns=4;s=ByteStringNode");
+#endif
+        node_desc->references.SetIsForward(false); // У такой ссылки всегда должен быть True
+        node_desc->references.SetReferenceTypeId("i=40"); // HasTypeDefinition
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECTTYPE);
+        node_desc->references.SetDisplayName("en", "Incorrect");
+        node_desc->references.SetBrowseName(0, "Incorrect");
+        node_desc->references.AddReferenceToVector(true);
+        // Ref 5 - Backlink to parent node
+        node_desc->references.SetNodeId("ns=2;i=100");
+        node_desc->references.SetIsForward(false);
+        node_desc->references.SetReferenceTypeId("i=47");
+        node_desc->references.SetNodeClass(UA_NODECLASS_OBJECT);
+        node_desc->references.SetDisplayName("en", "vPLC1");
+        node_desc->references.SetBrowseName(0, "vPLC1");
+        node_desc->references.AddReferenceToVector();
+        // Ref5 - Direct link
+        node_desc->references.SetNodeId("vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix.Variable");
+        node_desc->references.SetIsForward(true);
+        node_desc->references.SetReferenceTypeId("i=46");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLE);
+        node_desc->references.SetDisplayName("en", "vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix.Variable");
+        node_desc->references.SetBrowseName(0, "vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix.Variable");
+        node_desc->references.AddReferenceToVector();
+        nodes_description[nodes_ids.back()] = *node_desc;
+
+        // NODE ns=2;s=vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix.Variable - Node with only a back reference of type HasTypeDefinition
+        node_desc = std::make_unique<NodeDescription>();
+        nodes_ids.emplace_back(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix.Variable"), UA_TYPES_EXPANDEDNODEID);
+        valid_node_id.insert(nodes_ids.back());
+        node_desc->node_class = UA_NODECLASS_VARIABLE;
+        node_desc->attributes.SetBrowseName(1, "vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix.Variable");
+        node_desc->attributes.SetDisplayName("en", "vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix.Variable");
+        node_desc->attributes.SetDescription("en", "Description vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix.Variable");
+        node_desc->attributes.SetAccessLevel(UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
+        node_desc->attributes.SetUserAccessLevel(UA_ACCESSLEVELMASK_READ);
+        node_desc->attributes.SetWriteMask(UA_WRITEMASK_ACCESSLEVELEX);
+        node_desc->attributes.SetUserWriteMask(UA_WRITEMASK_USERACCESSLEVEL);
+        node_desc->attributes.SetEventNotifier(UA_EVENTNOTIFIER_SUBSCRIBE_TO_EVENT);
+        node_desc->attributes.SetDataType("i=12");
+        node_desc->attributes.SetValueScalar("Test message");
+        node_desc->attributes.SetValueRank(UA_VALUERANK_SCALAR);
+        node_desc->attributes.SetArrayDimmension(std::vector<uint32_t>());
+        node_desc->attributes.SetMinimumSamplingInterval(100);
+        node_desc->attributes.SetHistorizing(false);
+        // Ref1 - type
+        node_desc->references.SetNodeId("i=63");
+        node_desc->references.SetIsForward(false); // Such a link must always be True
+        node_desc->references.SetReferenceTypeId("i=40");
+        node_desc->references.SetNodeClass(UA_NODECLASS_VARIABLETYPE);
+        node_desc->references.SetDisplayName("en", "BaseDataVariableType");
+        node_desc->references.SetBrowseName(0, "BaseDataVariableType");
         node_desc->references.AddReferenceToVector();
         nodes_description[nodes_ids.back()] = *node_desc;
 
@@ -1121,6 +1229,10 @@ TEST_SUITE("nodesetexporter")
             const UATypesContainer<UA_ExpandedNodeId> br_path_test2(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2.BrowsePathTest.Browse2"), UA_TYPES_EXPANDEDNODEID);
             // For the node vplc1.test_node_2.BrowsePathTest.browse3, you need to replace in the link type HasTypeDefinition = i=62 [Basevariabletype] on i=63
             const UATypesContainer<UA_ExpandedNodeId> br_path_test3(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2.BrowsePathTest.Browse3"), UA_TYPES_EXPANDEDNODEID);
+            // For the vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix node, you need to replace the HasTypeDefinition backlink with a regular one
+            const UATypesContainer<UA_ExpandedNodeId> br_path_test4(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix"), UA_TYPES_EXPANDEDNODEID);
+            // For the vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix.Variable node, you need to replace the HasTypeDefinition backlink with a regular one and add a backlink to the parent
+            const UATypesContainer<UA_ExpandedNodeId> br_path_test5(UA_EXPANDEDNODEID_STRING(2, "vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix.Variable"), UA_TYPES_EXPANDEDNODEID);
 
             if (node.first == br_path_test1)
             {
@@ -1148,6 +1260,25 @@ TEST_SUITE("nodesetexporter")
                 // I will change the referenced node in the reference, since the kernel will replace the reference
                 auto refs = node.second.references.GetReferences();
                 refs[0].GetRef().nodeId = UA_EXPANDEDNODEID("i=63");
+                node.second.references.SetReferences(std::move(refs));
+            }
+            if (node.first == br_path_test4)
+            {
+                // Изменю в ссылке HasTypeDefinition направленность, так-как это сделает ядро
+                auto refs = node.second.references.GetReferences();
+                refs[0].GetRef().isForward = true;
+                node.second.references.SetReferences(std::move(refs));
+            }
+            if (node.first == br_path_test5)
+            {
+                // Since this is a simulation of adding backlinks, I will add a link that the kernel will add to the selection of comparative link data
+                node.second.references.SetNodeId("ns=2;s=vPLC1.Test_node_2.BrowsePathTest.HasTypeDefinitionFix");
+                node.second.references.SetIsForward(false);
+                node.second.references.SetReferenceTypeId("i=47");
+                node.second.references.AddReferenceToVector();
+                // Change the direction of the HasTypeDefinition link, just like the kernel does
+                auto refs = node.second.references.GetReferences();
+                refs[0].GetRef().isForward = true;
                 node.second.references.SetReferences(std::move(refs));
             }
         }
@@ -1263,16 +1394,14 @@ TEST_SUITE("nodesetexporter")
         {
             REQUIRE_CALL(open, ReadNodeClasses(_))
                 .WITH(_1.empty() == false)
-                .LR_SIDE_EFFECT(for (MockOpen62541::NodeClassesRequestResponse& ncs
-                                     : _1) { ncs.node_class = nodes_description.at(ncs.exp_node_id).node_class; })
+                .LR_SIDE_EFFECT(for (MockOpen62541::NodeClassesRequestResponse& ncs : _1) { ncs.node_class = nodes_description.at(ncs.exp_node_id).node_class; })
                 .RETURN(StatusResults::Good)
                 .IN_SEQUENCE(seq);
 
-            REQUIRE_CALL(open, ReadNodesAttributes(_))
+            REQUIRE_CALL(open, ReadNodesAttributes(_, _))
                 .WITH(_1.empty() == false)
-                .SIDE_EFFECT(for (MockOpen62541::NodeAttributesRequestResponse& narr
-                                  : _1) {
-                    MESSAGE("NodeAttributesRequestResponse nodeID: ", narr.exp_node_id.ToString());
+                .SIDE_EFFECT(for (MockOpen62541::NodeAttributesRequestResponse& narr : _1) {
+                    MESSAGE("NodeAttributesRequestResponse nodeID: ", narr.exp_node_id.get().ToString());
                     for (auto& attr : narr.attrs)
                     {
                         try
@@ -1292,8 +1421,7 @@ TEST_SUITE("nodesetexporter")
 
             REQUIRE_CALL(open, ReadNodeReferences(_))
                 .WITH(_1.empty() == false)
-                .LR_SIDE_EFFECT(for (MockOpen62541::NodeReferencesRequestResponse& nrrr
-                                     : _1) { nrrr.references = nodes_description.at(nrrr.exp_node_id).references.GetReferences(); })
+                .LR_SIDE_EFFECT(for (MockOpen62541::NodeReferencesRequestResponse& nrrr : _1) { nrrr.references = nodes_description.at(nrrr.exp_node_id).references.GetReferences(); })
                 .RETURN(StatusResults::Good)
                 .IN_SEQUENCE(seq);
 
@@ -1311,66 +1439,7 @@ TEST_SUITE("nodesetexporter")
                  .parent_start_node_replacer = parent_start_node_replacer});
             auto status_result = StatusResults(StatusResults::Fail);
             CHECK_NOTHROW(status_result = exporter_loop.StartExport());
-            // The number of nodes suitable for classes for export should be equal to the number of nodes that will be actually transferred for export
-            REQUIRE_EQ(number_of_valid_class_nodes_to_export, number_of_add_nodes_to_export);
-            CHECK_EQ(status_result.GetStatus(), StatusResults::Good);
-            MESSAGE("Number of nodes: ", nodes_ids.size(), ", number of nodes to be exported under incoming classes: ", number_of_add_nodes_to_export);
-        }
-
-        SUBCASE("Core test with a limit on a single data request")
-        {
-            REQUIRE_CALL(open, ReadNodeClasses(_))
-                .WITH(_1.empty() == false)
-                .LR_SIDE_EFFECT(for (MockOpen62541::NodeClassesRequestResponse& ncs
-                                     : _1) { ncs.node_class = nodes_description.at(ncs.exp_node_id).node_class; })
-                .RETURN(StatusResults::Good)
-                .TIMES(AT_LEAST(2)); // Этот метод должен вызываться более 1 раза в цикле при установленном количестве узлов
-
-            REQUIRE_CALL(open, ReadNodesAttributes(_))
-                .WITH(_1.empty() == false)
-                .SIDE_EFFECT(for (MockOpen62541::NodeAttributesRequestResponse& narr
-                                  : _1) {
-                    MESSAGE("NodeAttributesRequestResponse nodeID: ", narr.exp_node_id.ToString());
-                    for (auto& attr : narr.attrs)
-                    {
-                        try
-                        {
-                            MESSAGE("Attr: ", attr.first, ", data: ", VariantsOfAttrToString(nodes_description.at(narr.exp_node_id).attributes.GetWrappAttr(attr.first)));
-                            attr.second.emplace(nodes_description.at(narr.exp_node_id).attributes.GetWrappAttr(attr.first));
-                        }
-                        catch (std::exception& exc)
-                        {
-                            MESSAGE(exc.what());
-                            EXIT_FAILURE;
-                        }
-                    }
-                })
-                .RETURN(StatusResults::Good)
-                .TIMES(AT_LEAST(2)); // This method must be called more than one time in a loop with a set number of nodes
-
-            REQUIRE_CALL(open, ReadNodeReferences(_))
-                .WITH(_1.empty() == false)
-                .LR_SIDE_EFFECT(for (MockOpen62541::NodeReferencesRequestResponse& nrrr
-                                     : _1) { nrrr.references = nodes_description.at(nrrr.exp_node_id).references.GetReferences(); })
-                .RETURN(StatusResults::Good)
-                .TIMES(AT_LEAST(2)); // This method should be called more than 1 time in the cycle with the established number of nodes
-
-            REQUIRE_CALL(encoder, AddAliases(_)).WITH(_1.empty() == false).RETURN(StatusResults::Good).IN_SEQUENCE(seq);
-            REQUIRE_CALL(encoder, End()).RETURN(StatusResults::Good).IN_SEQUENCE(seq);
-
-            NodesetExporterLoop exporter_loop(
-                std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>>{{nodes_ids[0].ToString(), nodes_ids}},
-                open,
-                encoder,
-                logger,
-                {.is_perf_timer_enable = false,
-                 .ns0_custom_nodes_ready_to_work = false,
-                 .flat_list_of_nodes = {.is_enable = false, .create_missing_start_node = false, .allow_abstract_variable = false},
-                 .parent_start_node_replacer = parent_start_node_replacer});
-            exporter_loop.SetNumberOfMaxNodesToRequestData(max_nodes_to_request_data);
-            auto status_result = StatusResults(StatusResults::Fail);
-            CHECK_NOTHROW(status_result = exporter_loop.StartExport());
-            // The number of nodes suitable for classes for export should be equal to the number of nodes that will be actually transferred for export
+            // The number of nodes suitable for export classes must be equal to the number of nodes that will actually be transferred for export
             REQUIRE_EQ(number_of_valid_class_nodes_to_export, number_of_add_nodes_to_export);
             CHECK_EQ(status_result.GetStatus(), StatusResults::Good);
             MESSAGE("Number of nodes: ", nodes_ids.size(), ", number of nodes to be exported under incoming classes: ", number_of_add_nodes_to_export);

@@ -57,6 +57,8 @@ with open(full_nodids_file_path, newline='') as nodeids_file:
 #ifndef NODESETEXPORTER_COMMON_''' + output_filename.upper() + '''_H
 #define NODESETEXPORTER_COMMON_''' + output_filename.upper() + '''_H
 
+#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <map>
 #include <string>
 
@@ -84,4 +86,5 @@ const std::map<std::uint32_t, std::string> reference_type_aliases{''')
 
         printh(u'''};
 } // namespace nodesetexporter::''' + output_filename.replace('_', '').lower() + '''
-#endif // NODESETEXPORTER_COMMON_''' + output_filename.upper() + '''_H''')
+#endif // NODESETEXPORTER_COMMON_''' + output_filename.upper() + '''_H
+// NOLINTEND''')

@@ -42,7 +42,7 @@ TEST_SUITE("nodesetexporter::open62541")
         CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt2.GetRef().nodeId.nodeId, UA_String_fromChars("ns=2;i=11")), UA_STATUSCODE_GOOD);
         CHECK_EQ(UA_NodeId_parse(&ref_desc_cnt2.GetRef().typeDefinition.nodeId, UA_String_fromChars("i=46")), UA_STATUSCODE_GOOD);
         ref_desc_cnt2.GetRef().isForward = false;
-        UA_QualifiedName br_name2{1, UA_String_fromChars("TestNodes2")};
+        const UA_QualifiedName br_name2{1, UA_String_fromChars("TestNodes2")};
         ref_desc_cnt2.GetRef().browseName = br_name2;
         ref_desc_cnt2.GetRef().nodeClass = UA_NodeClass::UA_NODECLASS_REFERENCETYPE;
         ref_desc_cnt2.GetRef().displayName.locale = UA_String_fromChars("ru");
@@ -75,7 +75,7 @@ TEST_SUITE("nodesetexporter::open62541")
         auto* ref_desc_cnt_raw2 = UA_ReferenceDescription_new();
         UA_ReferenceDescription_copy(&ref_desc_cnt.GetRef(), ref_desc_cnt_raw);
         UA_ReferenceDescription_copy(&ref_desc_cnt2.GetRef(), ref_desc_cnt_raw2);
-        std::vector<UA_ReferenceDescription*> list_of_ref_desc_raw{ref_desc_cnt_raw, ref_desc_cnt_raw2};
+        const std::vector<UA_ReferenceDescription*> list_of_ref_desc_raw{ref_desc_cnt_raw, ref_desc_cnt_raw2};
         /****/
 
         SUBCASE("Copying")
@@ -108,7 +108,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 map_of_attr.begin(),
                 map_of_attr.end(),
                 nim.GetAttributes().begin(),
-                [](auto param1, auto param2)
+                [](const auto& param1, const auto& param2)
                 {
                     return param1.first == param2.first;
                 }));
@@ -149,7 +149,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 map_of_attr.begin(),
                 map_of_attr.end(),
                 nim.GetAttributes().begin(),
-                [](auto param1, auto param2)
+                [](const auto& param1, const auto& param2)
                 {
                     return param1.first == param2.first;
                 })); // SIGSEGV - tries to remove Variant... If GetAttributes() returns a copy.
@@ -201,7 +201,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 map_of_attr_tst_cpy.begin(),
                 map_of_attr_tst_cpy.end(),
                 nim.GetAttributes().begin(),
-                [](auto param1, auto param2)
+                [](const auto& param1, const auto& param2)
                 {
                     return param1.first == param2.first;
                 }));
@@ -303,7 +303,7 @@ TEST_SUITE("nodesetexporter::open62541")
         SUBCASE("Retrieving links with their aliases - GetNodeReferenceTypeAliases()")
         {
 #pragma region Test data
-            std::map<std::string, UATypesContainer<UA_NodeId>> nodeid_ref_types{
+            const std::map<std::string, UATypesContainer<UA_NodeId>> nodeid_ref_types{
                 {"References", UATypesContainer<UA_NodeId>(UA_NODEID_NUMERIC(0, UA_NS0ID_REFERENCES), UA_TYPES_NODEID)},
                 {"NonHierarchicalReferences", UATypesContainer<UA_NodeId>(UA_NODEID_NUMERIC(0, UA_NS0ID_NONHIERARCHICALREFERENCES), UA_TYPES_NODEID)},
                 {"HierarchicalReferences", UATypesContainer<UA_NodeId>(UA_NODEID_NUMERIC(0, UA_NS0ID_HIERARCHICALREFERENCES), UA_TYPES_NODEID)},
@@ -349,7 +349,7 @@ TEST_SUITE("nodesetexporter::open62541")
 #pragma endregion Test data
             SUBCASE("If there are no references in the NodeIntermediateModel object, an empty object is returned")
             {
-                NodeIntermediateModel nim;
+                const NodeIntermediateModel nim;
                 CHECK(nim.GetNodeReferenceTypeAliases().empty());
             }
 
@@ -372,7 +372,7 @@ TEST_SUITE("nodesetexporter::open62541")
         /*DELETE C-resources*/
         UA_ExpandedNodeId_delete(node_id_raw);
         UA_ExpandedNodeId_delete(parent_id_raw);
-        for (auto& raw_ref : list_of_ref_desc_raw)
+        for (const auto& raw_ref : list_of_ref_desc_raw)
         {
             UA_ReferenceDescription_delete(raw_ref);
         }

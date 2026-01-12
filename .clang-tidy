@@ -22,7 +22,11 @@ Checks: >-
   -readability-convert-member-functions-to-static,
   -readability-function-cognitive-complexity,
   -readability-redundant-access-specifiers,
-  -bugprone-easily-swappable-parameters
+  -bugprone-easily-swappable-parameters,
+  -misc-include-cleaner,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-avoid-do-while,
+  -modernize-use-designated-initializers
 CheckOptions:
   - { key: misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic, value: 1 }
 

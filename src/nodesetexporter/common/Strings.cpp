@@ -63,7 +63,7 @@ static inline UA_StatusCode UA_Guid_print(const UA_Guid* guid, UA_String* output
 #endif
 // NOLINTEND
 
-std::string UaGuidIdentifierToStdString(const UA_NodeId& node_id)
+std::string UaIdIdentifierToStdString(const UA_NodeId& node_id)
 {
     std::string id_text{};
     switch (node_id.identifierType)
@@ -88,4 +88,14 @@ std::string UaGuidIdentifierToStdString(const UA_NodeId& node_id)
     }
     return id_text;
 }
+
+#ifdef OPEN62541_VER_1_3
+// NOLINTBEGIN
+UA_Boolean UA_String_isEmpty(const UA_String* str)
+{
+    return (str->length == 0 || str->data == NULL);
+}
+// NOLINTEND
+#endif
+
 } // namespace nodesetexporter::common

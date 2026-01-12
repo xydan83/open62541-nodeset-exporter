@@ -1,13 +1,21 @@
 [requires]
-boost/1.79.0
-tinyxml2/9.0.0
-libxmlpp/5.0.1
-fmt/8.1.1
+boost/1.84.0
+tinyxml2/10.0.0
+libxmlpp/5.2.0
+fmt/10.2.1
 doctest/2.4.11
 trompeloeil/47
+magic_enum/0.9.6
 
 [options]
 tinyxml2:shared=False
 fmt:shared=False
 libxmlpp:shared=True
 boost:shared=False
+
+[generators]
+virtualenv
+
+[imports]
+bin, *.dll -> ./bin # Copies all dll files from the package "bin" folder to my project "bin" folder
+lib, *.dylib* -> ./bin # Copies all dylib files from the package "lib" folder to my project "bin" folder

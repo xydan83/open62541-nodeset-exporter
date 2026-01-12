@@ -71,7 +71,7 @@ function install_build_dependencies_ubuntu() {
     python3-pip
 
   echo "Installing Conan package manager..."
-  pip3 install --no-cache-dir "conan>=1.0,<2.0"
+  pip3 install --no-cache-dir "conan>=1.66,<2.0"
 
   echo "WARNING: It is recommended to re-login / reboot for new tools to become available on \$PATH."
 }
