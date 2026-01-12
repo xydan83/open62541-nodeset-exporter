@@ -87,7 +87,7 @@ StatusResults GrabChildNodeIdsFromStartNodeId(UA_Client* client, const UATypesCo
         }
         if (!one_iteration_nodes.empty())
         {
-            std::copy(one_iteration_nodes.begin(), one_iteration_nodes.end(), back_inserter(out));
+            std::ranges::copy(one_iteration_nodes, back_inserter(out));
         }
     } while (!one_iteration_nodes.empty());
 

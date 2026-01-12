@@ -68,6 +68,8 @@ inline void Open62541LogPlugin::UaLogStdoutLog(void* context, UA_LogLevel level,
     }
 }
 
+namespace
+{
 inline std::string LogCategoryEnumToString(UA_LogCategory log) noexcept
 {
     switch (log)
@@ -89,7 +91,7 @@ inline std::string LogCategoryEnumToString(UA_LogCategory log) noexcept
     }
     return "UA_UNKNOWN";
 }
-
+} // namespace
 inline void Open62541LogPlugin::ToLog(LoggerBase* logger, LogLevel level, UA_LogCategory& category, const char* msg, va_list args)
 {
     // Since the buffer is static, memory will be allocated once and the buffer will be used without relocation.

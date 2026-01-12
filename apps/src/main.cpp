@@ -17,7 +17,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char const* argv[])
     }
     catch (...)
     {
-        std::cout << "An unexpected exception has occurred in the program." << std::endl;
+        std::cout << "An unexpected exception has occurred in the program." << '\n';
         return EXIT_FAILURE;
     }
 }

@@ -66,7 +66,7 @@ To build you will need installed in your system:
 - cmake
 - GCC (C++20 features are available since GCC 8, but development was carried out on GCC 12).
   https://gcc.gnu.org/projects/cxx-status.html
-- pre-compiled and pre-installed open62541 version 1.3.x or 1.4.x
+- pre-compiled and pre-installed open62541 version 1.3.x or 1.4.x (UA_ENABLE_JSON_ENCODING=ON needed)
 
 Conan dependencies:
 

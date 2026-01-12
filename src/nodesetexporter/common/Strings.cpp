@@ -60,10 +60,15 @@ static inline UA_StatusCode UA_Guid_print(const UA_Guid* guid, UA_String* output
     UA_Guid_to_hex(guid, output->data, true);
     return UA_STATUSCODE_GOOD;
 }
+
+UA_Boolean UA_String_isEmpty(const UA_String* str)
+{
+    return (str->length == 0 || str->data == NULL);
+}
 #endif
 // NOLINTEND
 
-std::string UaGuidIdentifierToStdString(const UA_NodeId& node_id)
+std::string UaIdIdentifierToStdString(const UA_NodeId& node_id)
 {
     std::string id_text{};
     switch (node_id.identifierType)

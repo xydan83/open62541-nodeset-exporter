@@ -48,46 +48,52 @@ class ConsoleLogger final : public common::LoggerBase<std::string>
 {
 public:
     explicit ConsoleLogger(std::string&& logger_name)
-        : LoggerBase<std::string>(std::move(logger_name)){};
+        : LoggerBase<std::string>(std::move(logger_name)) {};
 
 private:
-    [[nodiscard]] inline auto GetMeCurrentDT() const
+    [[nodiscard]] auto GetMeCurrentDT() const
     {
         auto m_time_chrono = system_clock::to_time_t(system_clock::now());
         return std::put_time(std::localtime(&m_time_chrono), "%F %T");
     }
 
-    void VDebug(std::string&& message) override
+    void VDebug(std::string&& message_i) override
     {
+        const std::string message = std::move(message_i);
         std::cout << "[" << GetMeCurrentDT() << "]"
                   << " [" << this->GetLoggerName() << "] "
-                  << " [debug] " << message << std::endl;
+                  << " [debug] " << message << '\n';
     }
-    void VInfo(std::string&& message) override
+    void VInfo(std::string&& message_i) override
     {
+        const std::string message = std::move(message_i);
         std::cout << "[" << GetMeCurrentDT() << "]"
-                  << " [" << this->GetLoggerName() << "] " << green << " [info] " << reset << message << std::endl;
+                  << " [" << this->GetLoggerName() << "] " << green << " [info] " << reset << message << '\n';
     }
-    void VWarning(std::string&& message) override
+    void VWarning(std::string&& message_i) override
     {
+        const std::string message = std::move(message_i);
         std::cout << "[" << GetMeCurrentDT() << "]"
-                  << " [" << this->GetLoggerName() << "] " << yellow << " [warning] " << reset << message << std::endl;
+                  << " [" << this->GetLoggerName() << "] " << yellow << " [warning] " << reset << message << '\n';
     }
-    void VError(std::string&& message) override
+    void VError(std::string&& message_i) override
     {
+        const std::string message = std::move(message_i);
         std::cout << "[" << GetMeCurrentDT() << "]"
-                  << " [" << this->GetLoggerName() << "] " << red << " [error] " << reset << message << std::endl;
+                  << " [" << this->GetLoggerName() << "] " << red << " [error] " << reset << message << '\n';
     }
-    void VCritical(std::string&& message) override
+    void VCritical(std::string&& message_i) override
     {
+        const std::string message = std::move(message_i);
         std::cout << "[" << GetMeCurrentDT() << "]"
-                  << " [" << this->GetLoggerName() << "] " << red << bold << " [critical] " << reset << message << std::endl;
+                  << " [" << this->GetLoggerName() << "] " << red << bold << " [critical] " << reset << message << '\n';
     }
-    void VTrace(std::string&& message) override
+    void VTrace(std::string&& message_i) override
     {
+        const std::string message = std::move(message_i);
         std::cout << "[" << GetMeCurrentDT() << "]"
                   << " [" << this->GetLoggerName() << "] "
-                  << " [trace] " << message << std::endl;
+                  << " [trace] " << message << '\n';
     }
 };
 

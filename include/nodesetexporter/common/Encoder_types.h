@@ -9,13 +9,15 @@
 #ifndef NODESETEXPORTER_COMMON_ENCODER_TYPES_H
 #define NODESETEXPORTER_COMMON_ENCODER_TYPES_H
 
+#include <cstdint>
+
 namespace nodesetexporter::common
 {
 
 /**
  * @brief Encoding types of exported nodes.
  */
-enum EncoderTypes
+enum EncoderTypes : uint8_t
 {
     XML
 };

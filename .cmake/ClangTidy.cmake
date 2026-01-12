@@ -26,7 +26,7 @@ if (${NODESETEXPORTER_CLANG_TIDY_ENABLE})
             ${NODESETEXPORTER_CLANG_TIDY_EXE}
             -format-style=file
             # For clang-tidy, support for C++ Coroutines is provided by a different flag than for GCC.
-            --extra-arg=-fcoroutines-ts
+#            --extra-arg=-fcoroutines-ts
             -p ${CMAKE_BINARY_DIR}
     )
 

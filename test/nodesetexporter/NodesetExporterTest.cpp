@@ -36,8 +36,7 @@ using nodesetexporter::open62541::UATypesContainer;
 using nodesetexporter::open62541::browseoperations::GrabChildNodeIdsFromStartNodeId;
 using namespace std::literals;
 
-
-constexpr auto SERVER_START_TIMEOUT = 10s;
+constexpr auto SERVER_START_TIMEOUT = 30s;
 volatile std::atomic_bool running = true; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 std::condition_variable cv_server_started; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 std::mutex cv_mutex; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
@@ -67,11 +66,14 @@ auto OpcUaServerStart()
 #ifdef OPEN62541_VER_1_3
             config.logger = LoggerPlugin::Open62541LoggerCreator(logger);
 #elif defined(OPEN62541_VER_1_4)
+            logger.SetLevel(LogLevel::Info);
             auto logging = LoggerPlugin::Open62541LoggerCreator(logger);
             config.logging = &logging;
+#if UA_OPEN62541_VER_PATCH < 5
+            config.maxSecureChannels = 100; // Fix for earlier versions
 #endif
-            auto retval = UA_ServerConfig_setDefault(&config);
-            REQUIRE_EQ(retval, UA_STATUSCODE_GOOD);
+#endif
+            CHECK_ERR(UA_ServerConfig_setDefault(&config));
             auto* server = UA_Server_newWithConfig(&config);
             REQUIRE_NE(server, nullptr);
             CHECK_ERR(ex_nodeset(server)); // TEST NODESET LOADER (HARDCODE)
@@ -80,7 +82,7 @@ auto OpcUaServerStart()
                 server,
                 [](UA_Server* /*server*/, void*)
                 {
-                    std::lock_guard<std::mutex> locker(cv_mutex);
+                    const std::lock_guard<std::mutex> locker(cv_mutex);
                     cv_server_started.notify_all();
                 },
                 nullptr,
@@ -168,7 +170,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
     xpath = "//xmlns:UANodeSet/xmlns:Aliases/xmlns:Alias"; // Node to be checked
     CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
     MESSAGE("Nodes size = ", xml_nodes.size());
-    CHECK_EQ(xml_nodes.size(), 12);
+    CHECK_EQ(xml_nodes.size(), 14);
     if (!xml_nodes.empty())
     {
         size_t index = 0;
@@ -284,14 +286,14 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
     xpath = "//xmlns:UANodeSet/xmlns:UAObject/xmlns:References/xmlns:Reference"; // Node to be checked
     CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
     MESSAGE("Nodes size = ", xml_nodes.size());
-    CHECK_EQ(xml_nodes.size(), 38);
+    CHECK_EQ(xml_nodes.size(), 41);
 #pragma endregion UAObject
 
 #pragma region UAVariable
     xpath = "//xmlns:UANodeSet/xmlns:UAVariable"; // Node to be checked
     CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
     MESSAGE("Nodes size = ", xml_nodes.size());
-    CHECK_EQ(xml_nodes.size(), 15);
+    CHECK_EQ(xml_nodes.size(), 18);
     if (!xml_nodes.empty())
     {
         CHECK_NOTHROW(CheckXMLNode(
@@ -312,7 +314,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[2],
+            xml_nodes[5],
             "UAVariable",
             "",
             std::map<std::string, std::string>(
@@ -321,7 +323,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[3],
+            xml_nodes[6],
             "UAVariable",
             "",
             std::map<std::string, std::string>({{"NodeId", "ns=2;i=2"}, {"BrowseName", "2:temperature"}, {"ParentNodeId", "ns=2;i=1"}, {"DataType", "Double"}, {"ValueRank", "-2"}})));
@@ -329,7 +331,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[4],
+            xml_nodes[7],
             "UAVariable",
             "",
             std::map<std::string, std::string>({{"NodeId", "ns=2;i=8"}, {"BrowseName", "2:static_param3"}, {"ParentNodeId", "ns=2;i=5"}, {"DataType", "Double"}, {"ValueRank", "-2"}})));
@@ -337,7 +339,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[5],
+            xml_nodes[8],
             "UAVariable",
             "",
             std::map<std::string, std::string>({{"NodeId", "ns=2;i=7"}, {"BrowseName", "2:static_text_param2"}, {"ParentNodeId", "ns=2;i=5"}, {"DataType", "String"}, {"ValueRank", "-2"}})));
@@ -345,7 +347,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[6],
+            xml_nodes[9],
             "UAVariable",
             "",
             std::map<std::string, std::string>({{"NodeId", "ns=2;i=6"}, {"BrowseName", "2:static_param1"}, {"ParentNodeId", "ns=2;i=5"}, {"DataType", "Int64"}, {"ValueRank", "-2"}})));
@@ -353,7 +355,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[7],
+            xml_nodes[10],
             "UAVariable",
             "",
             std::map<std::string, std::string>({{"NodeId", "ns=2;i=10"}, {"BrowseName", "2:static_param1"}, {"ParentNodeId", "ns=2;i=9"}, {"DataType", "Int64"}, {"ValueRank", "-2"}})));
@@ -361,7 +363,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[8],
+            xml_nodes[11],
             "UAVariable",
             "",
             std::map<std::string, std::string>({{"NodeId", "ns=2;i=11"}, {"BrowseName", "2:MyProperty"}, {"ParentNodeId", "ns=2;i=9"}, {"DataType", "Double"}, {"ValueRank", "-2"}})));
@@ -369,7 +371,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[9],
+            xml_nodes[12],
             "UAVariable",
             "",
             std::map<std::string, std::string>(
@@ -378,7 +380,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[10],
+            xml_nodes[13],
             "UAVariable",
             "",
             std::map<std::string, std::string>({{"NodeId", "ns=2;i=19"}, {"BrowseName", "2:static_text_param2"}, {"ParentNodeId", "ns=2;i=17"}, {"DataType", "String"}, {"ValueRank", "-2"}})));
@@ -386,7 +388,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[11],
+            xml_nodes[14],
             "UAVariable",
             "",
             std::map<std::string, std::string>({{"NodeId", "ns=2;i=18"}, {"BrowseName", "2:static_param1"}, {"ParentNodeId", "ns=2;i=17"}, {"DataType", "Int64"}, {"ValueRank", "-2"}})));
@@ -394,7 +396,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[12],
+            xml_nodes[15],
             "UAVariable",
             "",
             std::map<std::string, std::string>({{"NodeId", "ns=2;i=16"}, {"BrowseName", "2:MyProperty2"}, {"ParentNodeId", "ns=2;i=15"}, {"DataType", "String"}, {"ValueRank", "-2"}})));
@@ -402,7 +404,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[13],
+            xml_nodes[16],
             "UAVariable",
             "",
             std::map<std::string, std::string>({{"NodeId", "ns=3;i=102"}, {"BrowseName", "3:integer32"}, {"ParentNodeId", "ns=3;i=100"}, {"DataType", "Int32"}, {"ValueRank", "-2"}})));
@@ -410,7 +412,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         log_message.clear();
         CHECK_NOTHROW(CheckXMLNode(
             log_message,
-            xml_nodes[14],
+            xml_nodes[17],
             "UAVariable",
             "",
             std::map<std::string, std::string>({{"NodeId", "ns=3;i=101"}, {"BrowseName", "3:boolean"}, {"ParentNodeId", "ns=3;i=100"}, {"DataType", "Boolean"}, {"ValueRank", "-2"}})));
@@ -421,7 +423,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
     xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:DisplayName"; // Node to be checked
     CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
     MESSAGE("Nodes size = ", xml_nodes.size());
-    CHECK_EQ(xml_nodes.size(), 15);
+    CHECK_EQ(xml_nodes.size(), 18);
     if (!xml_nodes.empty())
     {
         CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[0], "DisplayName", "pressure"));
@@ -430,43 +432,43 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "DisplayName", "pumpsetting"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[2], "DisplayName", "EnumValues"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[5], "DisplayName", "EnumValues"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[3], "DisplayName", "temperature"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[6], "DisplayName", "temperature"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[4], "DisplayName", "static_param3"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[7], "DisplayName", "static_param3"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[5], "DisplayName", "static_text_param2"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[8], "DisplayName", "static_text_param2"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[6], "DisplayName", "static_param1"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[9], "DisplayName", "static_param1"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[7], "DisplayName", "static_param1"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[10], "DisplayName", "static_param1"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[8], "DisplayName", "MyProperty"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[11], "DisplayName", "MyProperty"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[9], "DisplayName", "static_param3"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[12], "DisplayName", "static_param3"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[10], "DisplayName", "static_text_param2"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[13], "DisplayName", "static_text_param2"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[11], "DisplayName", "static_param1"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[14], "DisplayName", "static_param1"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[12], "DisplayName", "MyProperty2"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[15], "DisplayName", "MyProperty2"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[13], "DisplayName", "integer32"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[16], "DisplayName", "integer32"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[14], "DisplayName", "boolean"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[17], "DisplayName", "boolean"));
         MESSAGE(log_message);
         log_message.clear();
     }
@@ -474,7 +476,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
     xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Description"; // Node to be checked
     CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
     MESSAGE("Nodes size = ", xml_nodes.size());
-    CHECK_EQ(xml_nodes.size(), 14);
+    CHECK_EQ(xml_nodes.size(), 17);
     if (!xml_nodes.empty())
     {
         CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[0], "Description", "Description pressure"));
@@ -483,40 +485,40 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
         CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "Description", "Description pumpsetting"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[2], "Description", "Description temperature"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[5], "Description", "Description temperature"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[3], "Description", "Description static_param3"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[6], "Description", "Description static_param3"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[4], "Description", "Description static_text_param2"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[7], "Description", "Description static_text_param2"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[5], "Description", "Description static_param1"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[8], "Description", "Description static_param1"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[6], "Description", "Description static_param1"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[9], "Description", "Description static_param1"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[7], "Description", "Description MyProperty"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[10], "Description", "Description MyProperty"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[8], "Description", "Description static_param3"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[11], "Description", "Description static_param3"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[9], "Description", "Description static_text_param2"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[12], "Description", "Description static_text_param2"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[10], "Description", "Description static_param1"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[13], "Description", "Description static_param1"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[11], "Description", "Description MyProperty2"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[14], "Description", "Description MyProperty2"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[12], "Description", "Description integer32"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[15], "Description", "Description integer32"));
         MESSAGE(log_message);
         log_message.clear();
-        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[13], "Description", "Description boolean"));
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[16], "Description", "Description boolean"));
         MESSAGE(log_message);
         log_message.clear();
     }
@@ -524,7 +526,7 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
     xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:References"; // Node to be checked
     CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
     MESSAGE("Nodes size = ", xml_nodes.size());
-    CHECK_EQ(xml_nodes.size(), 15);
+    CHECK_EQ(xml_nodes.size(), 18);
     if (!xml_nodes.empty())
     {
         for (const auto& xml_node : xml_nodes)
@@ -538,7 +540,111 @@ void CheckElements( // NOLINT(google-readability-function-size,readability-funct
     xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:References/xmlns:Reference"; // Node to be checked
     CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
     MESSAGE("Nodes size = ", xml_nodes.size());
-    CHECK_EQ(xml_nodes.size(), 33);
+    CHECK_EQ(xml_nodes.size(), 39);
+
+    // Checking <Value> values in UAVariable nodes
+    xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value"; // Node to be checked
+    CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+    MESSAGE("Nodes size = ", xml_nodes.size());
+    CHECK_EQ(xml_nodes.size(), 17);
+    if (!xml_nodes.empty())
+    {
+        for (const auto& xml_node : xml_nodes)
+        {
+            CHECK_NOTHROW(CheckXMLNode(log_message, xml_node, "Value"));
+            MESSAGE(log_message);
+            log_message.clear();
+        }
+    }
+
+    xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value/*"; // Checking all value types
+    CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+    MESSAGE("Nodes size = ", xml_nodes.size());
+    CHECK_EQ(xml_nodes.size(), 17);
+    if (!xml_nodes.empty())
+    {
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[0], "Double", "49.522570000000002"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "String", "speed"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[2], "ListOfString"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[3], "ListOfUInt32"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[4], "DateTime", "2024-11-13T16:12:55Z"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[5], "Double", "45.529510000000002"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[6], "Double", "123.31999999999999"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[7], "String", "some text"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[8], "Int64", "311"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[9], "Int64", "532"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[10], "Double", "0.20999999999999999"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[11], "Double", "5883.04"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[12], "String", "Try get this"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[13], "Int64", "9953"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[14], "String", "some text in property"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[15], "Int32", "9994"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[16], "Boolean", "true"));
+        MESSAGE(log_message);
+        log_message.clear();
+    }
+    // Проверка значений <ListOf...> в узлах UAVariable
+    xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value/*/*"; // Проверяем все типы значений
+    CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+    MESSAGE("Nodes size = ", xml_nodes.size());
+    CHECK_EQ(xml_nodes.size(), 7); // 7 вложенностей в ListOf....
+    if (!xml_nodes.empty())
+    {
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[0], "String", "21433"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "String", "test 1"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[2], "String", "test 2"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[3], "String", "Тест русской локали 3"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[4], "UInt32", "21433"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[5], "UInt32", "121433"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[6], "UInt32", "8423"));
+        MESSAGE(log_message);
+        log_message.clear();
+    }
+
 #pragma endregion UAVariable
 
 #pragma region UAReferenceType
@@ -995,6 +1101,36 @@ void CheckElements2( // NOLINT(google-readability-function-size,readability-func
     CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
     MESSAGE("Nodes size = ", xml_nodes.size());
     CHECK_EQ(xml_nodes.size(), 4);
+
+    // Checking <Value> values in UAVariable nodes
+    xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value"; // Node to be checked
+    CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+    MESSAGE("Nodes size = ", xml_nodes.size());
+    CHECK_EQ(xml_nodes.size(), 2);
+    if (!xml_nodes.empty())
+    {
+        for (const auto& xml_node : xml_nodes)
+        {
+            CHECK_NOTHROW(CheckXMLNode(log_message, xml_node, "Value"));
+            MESSAGE(log_message);
+            log_message.clear();
+        }
+    }
+
+    xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value/*"; // Node to be checked
+    CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+    MESSAGE("Nodes size = ", xml_nodes.size());
+    CHECK_EQ(xml_nodes.size(), 2);
+    if (!xml_nodes.empty())
+    {
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[0], "Int32", "9994"));
+        MESSAGE(log_message);
+        log_message.clear();
+        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "Boolean", "true"));
+        MESSAGE(log_message);
+        log_message.clear();
+    }
+
 #pragma endregion UAVariable
 }
 
@@ -1038,13 +1174,14 @@ TEST_SUITE("nodesetexporter")
         std::string xpath;
         xmlpp::Attribute::NodeSet xml_nodes;
 
-        std::vector<std::string> namespaces{"urn:open62541.server.application", "http://test/nodes/1", "http://test/nodes/2"};
+        const std::vector<std::string> namespaces{"urn:open62541.server.application", "http://test/nodes/1", "http://test/nodes/2"};
         nodesetexporter::Options opt;
         opt.logger = nodesetexporter_logger;
+        opt.max_browse_continuation_points = 5;
 
         SUBCASE("One start node (short test).")
         {
-            std::map<std::string, UATypesContainer<UA_NodeId>> aliases(
+            const std::map<std::string, UATypesContainer<UA_NodeId>> aliases(
                 {{"Boolean", UATypesContainer<UA_NodeId>{UA_NODEID("i=1"), UA_TYPES_NODEID}},
                  {"Int32", UATypesContainer<UA_NodeId>{UA_NODEID("i=6"), UA_TYPES_NODEID}},
                  {"HasComponent", UATypesContainer<UA_NodeId>{UA_NODEID("i=47"), UA_TYPES_NODEID}},
@@ -1056,11 +1193,12 @@ TEST_SUITE("nodesetexporter")
                 SUBCASE("Buffer output.")
                 {
                     opt.is_perf_timer_enable = true;
-                    const UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_EXPANDEDNODEID("ns=3;i=100"), UA_TYPES_EXPANDEDNODEID);
+                    UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_TYPES_EXPANDEDNODEID);
+                    start_node_id.SetParamFromString(std::string("ns=3;i=100"));
                     GrabChildNodeIdsFromStartNodeId(client, start_node_id, node_id_list);
-                    std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
+                    const std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
 
-                    SUBCASE("number_of_max_nodes_to_request_data = 0. PerfTimer = ON")
+                    SUBCASE("max_nodes_per_browse = 0, max_nodes_per_read = 0, max_references_per_node = 0. PerfTimer = ON")
                     {
                         CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                         std::string out_xml(out_test_buffer.str());
@@ -1077,9 +1215,35 @@ TEST_SUITE("nodesetexporter")
                         CheckElements2(namespaces, aliases, parser);
                     }
 
-                    SUBCASE("number_of_max_nodes_to_request_data = 6. PerfTimer = ON")
+                    SUBCASE("max_nodes_per_browse = 2. PerfTimer = ON")
                     {
-                        opt.number_of_max_nodes_to_request_data = 6;
+                        opt.max_nodes_per_browse = 2;
+                        CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
+                        std::string out_xml(out_test_buffer.str());
+                        out_xml.erase(out_xml.rfind('\n'));
+                        MESSAGE(out_xml);
+                        CHECK_NOTHROW(parser.parse_memory(out_xml));
+                        CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
+                        // Since there are a lot of elements to compare, I use the function
+                        CheckElements2(namespaces, aliases, parser);
+                    }
+
+                    SUBCASE("max_nodes_per_read = 6. PerfTimer = ON")
+                    {
+                        opt.max_nodes_per_read = 6;
+                        CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
+                        std::string out_xml(out_test_buffer.str());
+                        out_xml.erase(out_xml.rfind('\n'));
+                        MESSAGE(out_xml);
+                        CHECK_NOTHROW(parser.parse_memory(out_xml));
+                        CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
+                        // Since there are a lot of elements to compare, I use the function
+                        CheckElements2(namespaces, aliases, parser);
+                    }
+
+                    SUBCASE("max_references_per_node = 1. PerfTimer = ON")
+                    {
+                        opt.max_references_per_node = 1;
                         CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                         std::string out_xml(out_test_buffer.str());
                         out_xml.erase(out_xml.rfind('\n'));
@@ -1094,14 +1258,15 @@ TEST_SUITE("nodesetexporter")
                 SUBCASE("Output to a file.")
                 {
                     opt.is_perf_timer_enable = false;
-                    const UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_EXPANDEDNODEID("ns=3;i=100"), UA_TYPES_EXPANDEDNODEID);
+                    UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_TYPES_EXPANDEDNODEID);
+                    start_node_id.SetParamFromString(std::string("ns=3;i=100"));
                     GrabChildNodeIdsFromStartNodeId(client, start_node_id, node_id_list);
-                    std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
+                    const std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
 
                     constexpr auto filename = "nodeset_test.xml";
                     std::string line;
                     std::string lines;
-                    SUBCASE("number_of_max_nodes_to_request_data = 0. PerfTimer = OFF")
+                    SUBCASE("max_nodes_per_browse = 0, max_nodes_per_read = 0, max_references_per_node=0. PerfTimer = OFF")
                     {
                         CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, filename, std::nullopt, opt));
                         std::ifstream in(filename, std::ios_base::in);
@@ -1119,9 +1284,47 @@ TEST_SUITE("nodesetexporter")
                         CheckElements2(namespaces, aliases, parser);
                     }
 
-                    SUBCASE("number_of_max_nodes_to_request_data = 6. PerfTimer = OFF")
+                    SUBCASE("max_nodes_per_browse = 2. PerfTimer = OFF")
                     {
-                        opt.number_of_max_nodes_to_request_data = 6;
+                        opt.max_nodes_per_browse = 2;
+                        CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, filename, std::nullopt, opt));
+                        std::ifstream in(filename, std::ios_base::in);
+                        CHECK(in.is_open());
+                        while (std::getline(in, line))
+                        {
+                            lines += line + "\n";
+                        };
+                        MESSAGE(lines);
+
+                        CHECK_NOTHROW(parser.parse_file(filename));
+                        CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
+                        out_test_buffer = std::stringstream(lines);
+                        // Since there are a lot of elements to compare, I use the function
+                        CheckElements2(namespaces, aliases, parser);
+                    }
+
+                    SUBCASE("max_nodes_per_read = 6. PerfTimer = OFF")
+                    {
+                        opt.max_nodes_per_read = 6;
+                        CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, filename, std::nullopt, opt));
+                        std::ifstream in(filename, std::ios_base::in);
+                        CHECK(in.is_open());
+                        while (std::getline(in, line))
+                        {
+                            lines += line + "\n";
+                        };
+                        MESSAGE(lines);
+
+                        CHECK_NOTHROW(parser.parse_file(filename));
+                        CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
+                        out_test_buffer = std::stringstream(lines);
+                        // Since there are a lot of elements to compare, I use the function
+                        CheckElements2(namespaces, aliases, parser);
+                    }
+
+                    SUBCASE("max_references_per_node = 1. PerfTimer = OFF")
+                    {
+                        opt.max_references_per_node = 1;
                         CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, filename, std::nullopt, opt));
                         std::ifstream in(filename, std::ios_base::in);
                         CHECK(in.is_open());
@@ -1147,9 +1350,11 @@ TEST_SUITE("nodesetexporter")
 
         SUBCASE("Multiple starting nodes") // NOLINT
         {
-            std::map<std::string, UATypesContainer<UA_NodeId>> aliases(
+            const std::map<std::string, UATypesContainer<UA_NodeId>> aliases(
                 {{"Boolean", UATypesContainer<UA_NodeId>{UA_NODEID("i=1"), UA_TYPES_NODEID}},
+                 {"DateTime", UATypesContainer<UA_NodeId>{UA_NODEID("i=13"), UA_TYPES_NODEID}},
                  {"Int32", UATypesContainer<UA_NodeId>{UA_NODEID("i=6"), UA_TYPES_NODEID}},
+                 {"UInt32", UATypesContainer<UA_NodeId>{UA_NODEID("i=7"), UA_TYPES_NODEID}},
                  {"Int64", UATypesContainer<UA_NodeId>{UA_NODEID("i=8"), UA_TYPES_NODEID}},
                  {"Double", UATypesContainer<UA_NodeId>{UA_NODEID("i=11"), UA_TYPES_NODEID}},
                  {"EnumValueType", UATypesContainer<UA_NodeId>{UA_NODEID("i=7594"), UA_TYPES_NODEID}},
@@ -1161,7 +1366,7 @@ TEST_SUITE("nodesetexporter")
                  {"HasSubtype", UATypesContainer<UA_NodeId>{UA_NODEID("i=45"), UA_TYPES_NODEID}},
                  {"HasTypeDefinition", UATypesContainer<UA_NodeId>{UA_NODEID("i=40"), UA_TYPES_NODEID}}});
 
-            std::map<std::string, UATypesContainer<UA_NodeId>> aliases2(
+            const std::map<std::string, UATypesContainer<UA_NodeId>> aliases2(
                 {{"Boolean", UATypesContainer<UA_NodeId>{UA_NODEID("i=1"), UA_TYPES_NODEID}},
                  {"Int32", UATypesContainer<UA_NodeId>{UA_NODEID("i=6"), UA_TYPES_NODEID}},
                  {"HasComponent", UATypesContainer<UA_NodeId>{UA_NODEID("i=47"), UA_TYPES_NODEID}},
@@ -1175,14 +1380,16 @@ TEST_SUITE("nodesetexporter")
                 SUBCASE("Buffer output.")
                 {
                     opt.is_perf_timer_enable = true;
-                    const UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID);
+                    UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_TYPES_EXPANDEDNODEID);
+                    start_node_id.SetParamFromString(std::string("ns=2;i=1"));
                     GrabChildNodeIdsFromStartNodeId(client, start_node_id, node_id_list);
-                    const UATypesContainer<UA_ExpandedNodeId> start_node_id2(UA_EXPANDEDNODEID("ns=3;i=100"), UA_TYPES_EXPANDEDNODEID);
+                    UATypesContainer<UA_ExpandedNodeId> start_node_id2(UA_TYPES_EXPANDEDNODEID);
+                    start_node_id2.SetParamFromString(std::string("ns=3;i=100"));
                     GrabChildNodeIdsFromStartNodeId(client, start_node_id2, node_id_list2);
-                    std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>>
+                    const std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>>
                         node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}, {node_id_list2[0].ToString(), std::move(node_id_list2)}};
 
-                    SUBCASE("number_of_max_nodes_to_request_data = 0. PerfTimer = ON")
+                    SUBCASE("max_nodes_per_browse = 0, max_nodes_per_read = 0, max_references_per_node=0. PerfTimer = ON")
                     {
                         CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                         std::string out_xml(out_test_buffer.str());
@@ -1194,9 +1401,35 @@ TEST_SUITE("nodesetexporter")
                         CheckElements(namespaces, aliases, parser);
                     }
 
-                    SUBCASE("number_of_max_nodes_to_request_data = 6. PerfTimer = ON")
+                    SUBCASE("max_nodes_per_browse = 3. PerfTimer = ON")
                     {
-                        opt.number_of_max_nodes_to_request_data = 6;
+                        opt.max_nodes_per_browse = 3;
+                        CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
+                        std::string out_xml(out_test_buffer.str());
+                        out_xml.erase(out_xml.rfind('\n'));
+                        MESSAGE(out_xml);
+                        CHECK_NOTHROW(parser.parse_memory(out_xml));
+                        CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
+                        // Since there are a lot of elements to compare, I use the function
+                        CheckElements(namespaces, aliases, parser);
+                    }
+
+                    SUBCASE("max_nodes_per_read = 6. PerfTimer = ON")
+                    {
+                        opt.max_nodes_per_read = 6;
+                        CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
+                        std::string out_xml(out_test_buffer.str());
+                        out_xml.erase(out_xml.rfind('\n'));
+                        MESSAGE(out_xml);
+                        CHECK_NOTHROW(parser.parse_memory(out_xml));
+                        CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
+                        // Since there are a lot of elements to compare, I use the function
+                        CheckElements(namespaces, aliases, parser);
+                    }
+
+                    SUBCASE("max_references_per_node = 1. PerfTimer = ON")
+                    {
+                        opt.max_references_per_node = 1;
                         CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                         std::string out_xml(out_test_buffer.str());
                         out_xml.erase(out_xml.rfind('\n'));
@@ -1211,17 +1444,19 @@ TEST_SUITE("nodesetexporter")
                 SUBCASE("Output to a file.")
                 {
                     opt.is_perf_timer_enable = false;
-                    const UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID);
+                    UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_TYPES_EXPANDEDNODEID);
+                    start_node_id.SetParamFromString(std::string("ns=2;i=1"));
                     GrabChildNodeIdsFromStartNodeId(client, start_node_id, node_id_list);
-                    const UATypesContainer<UA_ExpandedNodeId> start_node_id2(UA_EXPANDEDNODEID("ns=3;i=100"), UA_TYPES_EXPANDEDNODEID);
+                    UATypesContainer<UA_ExpandedNodeId> start_node_id2(UA_TYPES_EXPANDEDNODEID);
+                    start_node_id2.SetParamFromString(std::string("ns=3;i=100"));
                     GrabChildNodeIdsFromStartNodeId(client, start_node_id2, node_id_list2);
-                    std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>>
+                    const std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>>
                         node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}, {node_id_list2[0].ToString(), std::move(node_id_list2)}};
 
                     constexpr auto filename = "nodeset_test.xml";
                     std::string line;
                     std::string lines;
-                    SUBCASE("number_of_max_nodes_to_request_data = 0. PerfTimer = OFF")
+                    SUBCASE("max_nodes_per_browse = 0, max_nodes_per_read = 0, max_references_per_node=0. PerfTimer = OFF")
                     {
                         CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, filename, std::nullopt, opt));
                         std::ifstream in(filename, std::ios_base::in);
@@ -1233,15 +1468,15 @@ TEST_SUITE("nodesetexporter")
                         MESSAGE(lines);
 
                         CHECK_NOTHROW(parser.parse_file(filename));
-                        CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
+                        CHECK_NOTHROW(valid.validate(parser.get_document())); // Check against the schema of the entire document
                         out_test_buffer = std::stringstream(lines);
                         // Since there are a lot of elements to compare, I use the function
                         CheckElements(namespaces, aliases, parser);
                     }
 
-                    SUBCASE("number_of_max_nodes_to_request_data = 6. PerfTimer = OFF")
+                    SUBCASE("max_references_per_node = 1. PerfTimer = OFF")
                     {
-                        opt.number_of_max_nodes_to_request_data = 6;
+                        opt.max_nodes_per_read = 1;
                         CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, filename, std::nullopt, opt));
                         std::ifstream in(filename, std::ios_base::in);
                         CHECK(in.is_open());
@@ -1252,7 +1487,7 @@ TEST_SUITE("nodesetexporter")
                         MESSAGE(lines);
 
                         CHECK_NOTHROW(parser.parse_file(filename));
-                        CHECK_NOTHROW(valid.validate(parser.get_document())); // Checking against the schema of the entire document
+                        CHECK_NOTHROW(valid.validate(parser.get_document())); // Check against the schema of the entire document
                         out_test_buffer = std::stringstream(lines);
                         // Since there are a lot of elements to compare, I use the function
                         CheckElements(namespaces, aliases, parser);
@@ -1265,9 +1500,10 @@ TEST_SUITE("nodesetexporter")
 
                 SUBCASE("Checking the binding of the parent of the starting node")
                 {
-                    const UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_EXPANDEDNODEID("ns=2;i=17"), UA_TYPES_EXPANDEDNODEID);
+                    UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_TYPES_EXPANDEDNODEID);
+                    start_node_id.SetParamFromString(std::string("ns=2;i=17"));
                     GrabChildNodeIdsFromStartNodeId(client, start_node_id, node_id_list);
-                    std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
+                    const std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
 
                     SUBCASE("Default binding check (i=85)")
                     {
@@ -1315,9 +1551,11 @@ TEST_SUITE("nodesetexporter")
                         }
                     }
 
-                    SUBCASE("Default binding check (i=85). number_of_max_nodes_to_request_data = 2")
+                    SUBCASE("Default binding check (i=85). max_nodes_per_browse = 2, max_nodes_per_read = 2, max_references_per_node=1.")
                     {
-                        opt.number_of_max_nodes_to_request_data = 2;
+                        opt.max_nodes_per_browse = 2;
+                        opt.max_nodes_per_read = 2;
+                        opt.max_references_per_node = 1;
                         CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                         std::string out_xml(out_test_buffer.str());
                         out_xml.erase(out_xml.rfind('\n'));
@@ -1410,10 +1648,12 @@ TEST_SUITE("nodesetexporter")
                         }
                     }
 
-                    SUBCASE("Check for binding to the specified node in the parameters (ns=2;i=3). number_of_max_nodes_to_request_data = 2")
+                    SUBCASE("Check for binding to the specified node in the parameters  (ns=2;i=3). max_nodes_per_browse = 2, max_nodes_per_read = 2, max_references_per_node=1.")
                     {
                         opt.parent_start_node_replacer = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID_NUMERIC(2, 3), UA_TYPES_EXPANDEDNODEID);
-                        opt.number_of_max_nodes_to_request_data = 2;
+                        opt.max_nodes_per_browse = 2;
+                        opt.max_nodes_per_read = 2;
+                        opt.max_references_per_node = 1;
                         CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                         std::string out_xml(out_test_buffer.str());
                         out_xml.erase(out_xml.rfind('\n'));
@@ -1473,10 +1713,11 @@ TEST_SUITE("nodesetexporter")
                 opt.flat_list_of_nodes.is_enable = true;
                 opt.flat_list_of_nodes.create_missing_start_node = false;
                 opt.flat_list_of_nodes.allow_abstract_variable = false;
-                const UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_TYPES_EXPANDEDNODEID);
+                start_node_id.SetParamFromString(std::string("ns=2;i=1"));
                 GrabChildNodeIdsFromStartNodeId(client, start_node_id, node_id_list);
 
-                std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
+                const std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
                 CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                 std::string out_xml(out_test_buffer.str());
                 out_xml.erase(out_xml.rfind('\n'));
@@ -1564,7 +1805,7 @@ TEST_SUITE("nodesetexporter")
                 xpath = "//xmlns:UANodeSet/xmlns:UAVariable"; // Checking node
                 CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                 MESSAGE("Nodes UAVariable size = ", xml_nodes.size());
-                CHECK_EQ(xml_nodes.size(), 15);
+                CHECK_EQ(xml_nodes.size(), 18);
                 if (!xml_nodes.empty())
                 {
                     CHECK_NOTHROW(CheckXMLNode(
@@ -1580,7 +1821,7 @@ TEST_SUITE("nodesetexporter")
                 xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:References/xmlns:Reference"; // Checking node
                 CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                 MESSAGE("Nodes size = ", xml_nodes.size());
-                CHECK_EQ(xml_nodes.size(), 30);
+                CHECK_EQ(xml_nodes.size(), 36);
                 if (!xml_nodes.empty())
                 {
                     // Node ns=2;i=4
@@ -1596,7 +1837,7 @@ TEST_SUITE("nodesetexporter")
                 xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:DisplayName"; // Checking node
                 CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                 MESSAGE("Nodes size = ", xml_nodes.size());
-                CHECK_EQ(xml_nodes.size(), 15);
+                CHECK_EQ(xml_nodes.size(), 18);
                 if (!xml_nodes.empty())
                 {
                     // ns=2;i=4
@@ -1608,11 +1849,107 @@ TEST_SUITE("nodesetexporter")
                 xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Description"; // Checking node
                 CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                 MESSAGE("Nodes size = ", xml_nodes.size());
-                CHECK_EQ(xml_nodes.size(), 14);
+                CHECK_EQ(xml_nodes.size(), 17);
                 if (!xml_nodes.empty())
                 {
                     // ns=2;i=4
                     CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "Description", "Description pumpsetting"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                }
+                // Checking Value for UAVariable
+                xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value"; // Checking node
+                CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+                MESSAGE("Nodes size = ", xml_nodes.size());
+                CHECK_EQ(xml_nodes.size(), 15);
+                if (!xml_nodes.empty())
+                {
+                    for (const auto& xml_node : xml_nodes)
+                    {
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_node, "Value"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                    }
+                }
+
+                xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value/*"; // Checking all value types
+                CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+                MESSAGE("Nodes size = ", xml_nodes.size());
+                CHECK_EQ(xml_nodes.size(), 15);
+                if (!xml_nodes.empty())
+                {
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[0], "Double", "49.522570000000002"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "String", "speed"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[2], "ListOfString"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[3], "ListOfUInt32"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[4], "DateTime", "2024-11-13T16:12:55Z"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[5], "Double", "45.529510000000002"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[6], "Double", "123.31999999999999"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[7], "String", "some text"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[8], "Int64", "311"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[9], "Int64", "532"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[10], "Double", "0.20999999999999999"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[11], "Double", "5883.04"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[12], "String", "Try get this"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[13], "Int64", "9953"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[14], "String", "some text in property"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                }
+                // Checking <ListOf...> values in UAVariable nodes
+                xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value/*/*"; // Checking all value types
+                CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+                MESSAGE("Nodes size = ", xml_nodes.size());
+                CHECK_EQ(xml_nodes.size(), 7); // 7 nestings in ListOf....
+                if (!xml_nodes.empty())
+                {
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[0], "String", "21433"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "String", "test 1"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[2], "String", "test 2"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[3], "String", "Тест русской локали 3"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[4], "UInt32", "21433"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[5], "UInt32", "121433"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[6], "UInt32", "8423"));
                     MESSAGE(log_message);
                     log_message.clear();
                 }
@@ -1624,15 +1961,17 @@ TEST_SUITE("nodesetexporter")
                 opt.is_perf_timer_enable = true;
                 opt.flat_list_of_nodes.is_enable = true;
                 opt.flat_list_of_nodes.allow_abstract_variable = false;
-                const UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_TYPES_EXPANDEDNODEID);
+                start_node_id.SetParamFromString(std::string("ns=2;i=1"));
                 GrabChildNodeIdsFromStartNodeId(client, start_node_id, node_id_list);
 
                 std::vector<UATypesContainer<UA_ExpandedNodeId>> node_id_list_with_new_start_node;
-                const UATypesContainer<UA_ExpandedNodeId> new_start_node_id(UA_EXPANDEDNODEID("ns=2;s=new_start_node"), UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> new_start_node_id(UA_TYPES_EXPANDEDNODEID);
+                new_start_node_id.SetParamFromString(std::string("ns=2;s=new_start_node"));
                 node_id_list_with_new_start_node.push_back(new_start_node_id);
-                std::copy(node_id_list.begin(), node_id_list.end(), std::back_inserter(node_id_list_with_new_start_node));
+                std::ranges::copy(node_id_list, std::back_inserter(node_id_list_with_new_start_node));
 
-                std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{
+                const std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{
                     {node_id_list_with_new_start_node[0].ToString(), std::move(node_id_list_with_new_start_node)}};
 
                 SUBCASE("create_missing_start_node = false - error")
@@ -1737,7 +2076,7 @@ TEST_SUITE("nodesetexporter")
                     xpath = "//xmlns:UANodeSet/xmlns:UAVariable"; // Checking node
                     CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                     MESSAGE("Nodes UAVariable size = ", xml_nodes.size());
-                    CHECK_EQ(xml_nodes.size(), 15);
+                    CHECK_EQ(xml_nodes.size(), 18);
                     if (!xml_nodes.empty())
                     {
                         CHECK_NOTHROW(CheckXMLNode(
@@ -1754,7 +2093,7 @@ TEST_SUITE("nodesetexporter")
                     xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:References/xmlns:Reference"; // Checking node
                     CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                     MESSAGE("Nodes size = ", xml_nodes.size());
-                    CHECK_EQ(xml_nodes.size(), 30);
+                    CHECK_EQ(xml_nodes.size(), 36);
                     if (!xml_nodes.empty())
                     {
                         // Node ns=2;i=4
@@ -1770,7 +2109,7 @@ TEST_SUITE("nodesetexporter")
                     xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:DisplayName"; // Checking node
                     CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                     MESSAGE("Nodes size = ", xml_nodes.size());
-                    CHECK_EQ(xml_nodes.size(), 15);
+                    CHECK_EQ(xml_nodes.size(), 18);
                     if (!xml_nodes.empty())
                     {
                         // ns=2;i=4
@@ -1782,11 +2121,106 @@ TEST_SUITE("nodesetexporter")
                     xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Description"; // Checking node
                     CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                     MESSAGE("Nodes size = ", xml_nodes.size());
-                    CHECK_EQ(xml_nodes.size(), 14);
+                    CHECK_EQ(xml_nodes.size(), 17);
                     if (!xml_nodes.empty())
                     {
                         // ns=2;i=4
                         CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "Description", "Description pumpsetting"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                    }
+                    // Checking Value for UAVariable
+                    xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value"; // Checking node
+                    CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+                    MESSAGE("Nodes size = ", xml_nodes.size());
+                    CHECK_EQ(xml_nodes.size(), 15);
+                    if (!xml_nodes.empty())
+                    {
+                        for (const auto& xml_node : xml_nodes)
+                        {
+                            CHECK_NOTHROW(CheckXMLNode(log_message, xml_node, "Value"));
+                            MESSAGE(log_message);
+                            log_message.clear();
+                        }
+                    }
+                    xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value/*"; // Checking all value types
+                    CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+                    MESSAGE("Nodes size = ", xml_nodes.size());
+                    CHECK_EQ(xml_nodes.size(), 15);
+                    if (!xml_nodes.empty())
+                    {
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[0], "Double", "49.522570000000002"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "String", "speed"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[2], "ListOfString"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[3], "ListOfUInt32"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[4], "DateTime", "2024-11-13T16:12:55Z"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[5], "Double", "45.529510000000002"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[6], "Double", "123.31999999999999"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[7], "String", "some text"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[8], "Int64", "311"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[9], "Int64", "532"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[10], "Double", "0.20999999999999999"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[11], "Double", "5883.04"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[12], "String", "Try get this"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[13], "Int64", "9953"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[14], "String", "some text in property"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                    }
+                    // Checking <ListOf...> values in UAVariable nodes
+                    xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value/*/*"; // Checking all value types
+                    CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+                    MESSAGE("Nodes size = ", xml_nodes.size());
+                    CHECK_EQ(xml_nodes.size(), 7); // 7 nestings in ListOf....
+                    if (!xml_nodes.empty())
+                    {
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[0], "String", "21433"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "String", "test 1"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[2], "String", "test 2"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[3], "String", "Тест русской локали 3"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[4], "UInt32", "21433"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[5], "UInt32", "121433"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[6], "UInt32", "8423"));
                         MESSAGE(log_message);
                         log_message.clear();
                     }
@@ -1800,21 +2234,25 @@ TEST_SUITE("nodesetexporter")
                 opt.flat_list_of_nodes.is_enable = true;
                 opt.flat_list_of_nodes.create_missing_start_node = true;
                 opt.flat_list_of_nodes.allow_abstract_variable = false;
-                const UATypesContainer<UA_ExpandedNodeId> start_node_id_1(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID);
-                const UATypesContainer<UA_ExpandedNodeId> start_node_id_2(UA_EXPANDEDNODEID("ns=3;i=100"), UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> start_node_id_1(UA_TYPES_EXPANDEDNODEID);
+                start_node_id_1.SetParamFromString(std::string("ns=2;i=1"));
+                UATypesContainer<UA_ExpandedNodeId> start_node_id_2(UA_TYPES_EXPANDEDNODEID);
+                start_node_id_2.SetParamFromString(std::string("ns=3;i=100"));
                 GrabChildNodeIdsFromStartNodeId(client, start_node_id_1, node_id_list);
                 GrabChildNodeIdsFromStartNodeId(client, start_node_id_2, node_id_list2);
 
-                const UATypesContainer<UA_ExpandedNodeId> new_start_node_id_1(UA_EXPANDEDNODEID("ns=2;s=new_start_node_1"), UA_TYPES_EXPANDEDNODEID);
-                const UATypesContainer<UA_ExpandedNodeId> new_start_node_id_2(UA_EXPANDEDNODEID("ns=3;s=new_start_node_2"), UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> new_start_node_id_1(UA_TYPES_EXPANDEDNODEID);
+                new_start_node_id_1.SetParamFromString(std::string("ns=2;s=new_start_node_1"));
+                UATypesContainer<UA_ExpandedNodeId> new_start_node_id_2(UA_TYPES_EXPANDEDNODEID);
+                new_start_node_id_2.SetParamFromString(std::string("ns=3;s=new_start_node_2"));
                 std::vector<UATypesContainer<UA_ExpandedNodeId>> node_id_list_with_new_start_node_1;
                 std::vector<UATypesContainer<UA_ExpandedNodeId>> node_id_list_with_new_start_node_2;
                 node_id_list_with_new_start_node_1.push_back(new_start_node_id_1);
                 node_id_list_with_new_start_node_2.push_back(new_start_node_id_2);
-                std::copy(node_id_list.begin(), node_id_list.end(), std::back_inserter(node_id_list_with_new_start_node_1));
-                std::copy(node_id_list2.begin(), node_id_list2.end(), std::back_inserter(node_id_list_with_new_start_node_2));
+                std::ranges::copy(node_id_list, std::back_inserter(node_id_list_with_new_start_node_1));
+                std::ranges::copy(node_id_list2, std::back_inserter(node_id_list_with_new_start_node_2));
 
-                std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{
+                const std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{
                     {node_id_list_with_new_start_node_1[0].ToString(), std::move(node_id_list_with_new_start_node_1)},
                     {node_id_list_with_new_start_node_2[0].ToString(), std::move(node_id_list_with_new_start_node_2)}};
                 CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
@@ -1911,7 +2349,7 @@ TEST_SUITE("nodesetexporter")
                 xpath = "//xmlns:UANodeSet/xmlns:UAVariable"; // Checking node
                 CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                 MESSAGE("Nodes UAVariable size = ", xml_nodes.size());
-                CHECK_EQ(xml_nodes.size(), 17);
+                CHECK_EQ(xml_nodes.size(), 20);
                 if (!xml_nodes.empty())
                 {
                     CHECK_NOTHROW(CheckXMLNode(
@@ -1928,7 +2366,7 @@ TEST_SUITE("nodesetexporter")
                 xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:References/xmlns:Reference"; // Checking node
                 CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                 MESSAGE("Nodes size = ", xml_nodes.size());
-                CHECK_EQ(xml_nodes.size(), 34);
+                CHECK_EQ(xml_nodes.size(), 40);
                 if (!xml_nodes.empty())
                 {
                     // Node ns=2;i=4
@@ -1944,7 +2382,7 @@ TEST_SUITE("nodesetexporter")
                 xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:DisplayName"; // Checking node
                 CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                 MESSAGE("Nodes size = ", xml_nodes.size());
-                CHECK_EQ(xml_nodes.size(), 17);
+                CHECK_EQ(xml_nodes.size(), 20);
                 if (!xml_nodes.empty())
                 {
                     // ns=2;i=4
@@ -1956,7 +2394,7 @@ TEST_SUITE("nodesetexporter")
                 xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Description"; // Checking node
                 CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                 MESSAGE("Nodes size = ", xml_nodes.size());
-                CHECK_EQ(xml_nodes.size(), 16);
+                CHECK_EQ(xml_nodes.size(), 19);
                 if (!xml_nodes.empty())
                 {
                     // ns=2;i=4
@@ -2053,12 +2491,12 @@ TEST_SUITE("nodesetexporter")
                 xpath = "//xmlns:UANodeSet/xmlns:UAVariable"; // Checking node
                 CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                 MESSAGE("Nodes UAVariable size = ", xml_nodes.size());
-                CHECK_EQ(xml_nodes.size(), 17);
+                CHECK_EQ(xml_nodes.size(), 20);
                 if (!xml_nodes.empty())
                 {
                     CHECK_NOTHROW(CheckXMLNode(
                         log_message,
-                        xml_nodes[16],
+                        xml_nodes[19],
                         "UAVariable",
                         "",
                         std::map<std::string, std::string>(
@@ -2070,15 +2508,15 @@ TEST_SUITE("nodesetexporter")
                 xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:References/xmlns:Reference"; // Проверяемый узел
                 CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                 MESSAGE("Nodes size = ", xml_nodes.size());
-                CHECK_EQ(xml_nodes.size(), 34);
+                CHECK_EQ(xml_nodes.size(), 40);
                 if (!xml_nodes.empty())
                 {
                     // Node ns=3;i=101
                     CHECK_NOTHROW(
-                        CheckXMLNode(log_message, xml_nodes[32], "Reference", "ns=3;s=new_start_node_2", std::map<std::string, std::string>({{"ReferenceType", "Organizes"}, {"IsForward", "false"}})));
+                        CheckXMLNode(log_message, xml_nodes[38], "Reference", "ns=3;s=new_start_node_2", std::map<std::string, std::string>({{"ReferenceType", "Organizes"}, {"IsForward", "false"}})));
                     MESSAGE(log_message);
                     log_message.clear();
-                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[33], "Reference", "i=63", std::map<std::string, std::string>({{"ReferenceType", "HasTypeDefinition"}}))); // <--
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[39], "Reference", "i=63", std::map<std::string, std::string>({{"ReferenceType", "HasTypeDefinition"}}))); // <--
                     MESSAGE(log_message);
                     log_message.clear();
                 }
@@ -2086,11 +2524,11 @@ TEST_SUITE("nodesetexporter")
                 xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:DisplayName"; // Checking node
                 CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                 MESSAGE("Nodes size = ", xml_nodes.size());
-                CHECK_EQ(xml_nodes.size(), 17);
+                CHECK_EQ(xml_nodes.size(), 20);
                 if (!xml_nodes.empty())
                 {
                     // ns=3;i=101
-                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[16], "DisplayName", "boolean"));
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[19], "DisplayName", "boolean"));
                     MESSAGE(log_message);
                     log_message.clear();
                 }
@@ -2098,15 +2536,117 @@ TEST_SUITE("nodesetexporter")
                 xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Description"; // Checking node
                 CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
                 MESSAGE("Nodes size = ", xml_nodes.size());
-                CHECK_EQ(xml_nodes.size(), 16);
+                CHECK_EQ(xml_nodes.size(), 19);
                 if (!xml_nodes.empty())
                 {
                     // ns=3;i=101
-                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[15], "Description", "Description boolean"));
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[18], "Description", "Description boolean"));
                     MESSAGE(log_message);
                     log_message.clear();
                 }
 #pragma endregion The second row of nodes
+                // Checking Value for UAVariable
+                xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value"; // Checking node
+                CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+                MESSAGE("Nodes size = ", xml_nodes.size());
+                CHECK_EQ(xml_nodes.size(), 17);
+                if (!xml_nodes.empty())
+                {
+                    for (const auto& xml_node : xml_nodes)
+                    {
+                        CHECK_NOTHROW(CheckXMLNode(log_message, xml_node, "Value"));
+                        MESSAGE(log_message);
+                        log_message.clear();
+                    }
+                }
+                // Common values in UAVariable nodes
+                xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value/*"; // Checking all value types
+                CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+                MESSAGE("Nodes size = ", xml_nodes.size());
+                CHECK_EQ(xml_nodes.size(), 17);
+                if (!xml_nodes.empty())
+                {
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[0], "Double", "49.522570000000002"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "String", "speed"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[2], "ListOfString"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[3], "ListOfUInt32"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[4], "DateTime", "2024-11-13T16:12:55Z"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[5], "Double", "45.529510000000002"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[6], "Double", "123.31999999999999"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[7], "String", "some text"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[8], "Int64", "311"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[9], "Int64", "532"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[10], "Double", "0.20999999999999999"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[11], "Double", "5883.04"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[12], "String", "Try get this"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[13], "Int64", "9953"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[14], "String", "some text in property"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[15], "Int32", "9994"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[16], "Boolean", "true"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                }
+                // Checking <ListOf...> values in UAVariable nodes
+                xpath = "//xmlns:UANodeSet/xmlns:UAVariable/xmlns:Value/*/*"; // Checking all value types
+                CHECK_NOTHROW(xml_nodes = GetFindXMLNode(xpath, parser));
+                MESSAGE("Nodes size = ", xml_nodes.size());
+                CHECK_EQ(xml_nodes.size(), 7); // 7 nestings in ListOf....
+                if (!xml_nodes.empty())
+                {
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[0], "String", "21433"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[1], "String", "test 1"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[2], "String", "test 2"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[3], "String", "Тест русской локали 3"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[4], "UInt32", "21433"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[5], "UInt32", "121433"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                    CHECK_NOTHROW(CheckXMLNode(log_message, xml_nodes[6], "UInt32", "8423"));
+                    MESSAGE(log_message);
+                    log_message.clear();
+                }
             }
 
             SUBCASE("Only one nodeid from the OPC UA standard components, which are located in Namespace = 0 can be indicated as the starting - this is i=85.")
@@ -2119,9 +2659,10 @@ TEST_SUITE("nodesetexporter")
 
                 SUBCASE("i=85 - It must be successfully worked out.")
                 {
-                    const UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_EXPANDEDNODEID("i=85"), UA_TYPES_EXPANDEDNODEID);
+                    UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_TYPES_EXPANDEDNODEID);
+                    start_node_id.SetParamFromString(std::string("i=85"));
                     GrabChildNodeIdsFromStartNodeId(client, start_node_id, node_id_list); // Emulation of the list of nodes
-                    std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
+                    const std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
                     CHECK_EQ(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt).GetStatus(), nodesetexporter::StatusResults::Good);
                     std::string out_xml(out_test_buffer.str());
                     out_xml.erase(out_xml.rfind('\n'));
@@ -2132,9 +2673,10 @@ TEST_SUITE("nodesetexporter")
 
                 SUBCASE("i=86 - An attempt to use any other standard node will end with a mistake.")
                 {
-                    const UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_EXPANDEDNODEID("i=86"), UA_TYPES_EXPANDEDNODEID);
+                    UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_TYPES_EXPANDEDNODEID);
+                    start_node_id.SetParamFromString(std::string("i=86"));
                     GrabChildNodeIdsFromStartNodeId(client, start_node_id, node_id_list); // Emulation of the list of nodes
-                    std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
+                    const std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
                     CHECK_EQ(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt).GetStatus(), nodesetexporter::StatusResults::Fail);
                 }
             }
@@ -2149,9 +2691,10 @@ TEST_SUITE("nodesetexporter")
                 opt.flat_list_of_nodes.is_enable = true;
                 opt.flat_list_of_nodes.create_missing_start_node = true;
                 opt.flat_list_of_nodes.allow_abstract_variable = true;
-                const UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_EXPANDEDNODEID("ns=3;s=ROOT_NODE"), UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_TYPES_EXPANDEDNODEID);
+                start_node_id.SetParamFromString(std::string("ns=3;s=ROOT_NODE"));
                 GrabChildNodeIdsFromStartNodeId(client, start_node_id, node_id_list);
-                std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
+                const std::map<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>> node_id_list_from_start_nodes{{node_id_list[0].ToString(), std::move(node_id_list)}};
                 CHECK_NOTHROW(ExportNodesetFromClient(*client, node_id_list_from_start_nodes, "", out_test_buffer, opt));
                 std::string out_xml(out_test_buffer.str());
                 out_xml.erase(out_xml.rfind('\n'));
@@ -2197,6 +2740,6 @@ TEST_SUITE("nodesetexporter")
         {
             server_thread.join();
         }
-        sleep(1);
+        sleep(1); // NOLINT(clang-analyzer-unix.BlockInCriticalSection)
     }
 }

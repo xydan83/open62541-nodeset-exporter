@@ -155,7 +155,9 @@ private:
     std::string m_password{};
     std::string m_export_filename{};
     std::string m_parent_start_node_replacer{};
-    u_int32_t m_number_of_max_nodes_to_request_data{0};
+    u_int32_t m_max_nodes_per_browse{0};
+    u_int32_t m_max_nodes_per_read{0};
+    u_int32_t m_max_references_per_node{0};
     u_int32_t m_client_timeout{client_timeout_default_ms};
     bool m_perf_timer{false};
     ::nodesetexporter::Options m_opt{};

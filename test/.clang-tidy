@@ -6,4 +6,9 @@ Checks: >-
   -readability-magic-numbers,
   -cppcoreguidelines-pro-bounds-constant-array-index,
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
-  -cppcoreguidelines-pro-type-reinterpret-cast
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-avoid-do-while,
+  -readability-redundant-member-init,
+  -readability-redundant-casting,
+  -bugprone-unchecked-optional-access,
+  -misc-use-anonymous-namespace

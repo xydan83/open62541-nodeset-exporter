@@ -32,17 +32,17 @@ using ::nodesetexporter::common::PerformanceTimer;
 
 void Application::PrintHelp(std::ostream& out, const boost::program_options::options_description& options_description) const
 {
-    out << "Usage: " << m_args[0] << " [options]" << std::endl;
+    out << "Usage: " << m_args[0] << " [options]" << '\n';
     out << options_description;
 }
 
 void Application::PrintVersion(std::ostream& out) const
 {
-    out << "Application version: " << build::version << std::endl;
-    out << "Open62541 library version: " << UA_OPEN62541_VERSION << std::endl;
-    out << "Git hash: " << build::git_revision << std::endl;
-    out << "Compiler: " << build::compiler << std::endl;
-    out << "Build type: " << build::build_type << std::endl;
+    out << "Application version: " << build::version << '\n';
+    out << "Open62541 library version: " << UA_OPEN62541_VERSION << '\n';
+    out << "Git hash: " << build::git_revision << '\n';
+    out << "Compiler: " << build::compiler << '\n';
+    out << "Build type: " << build::build_type << '\n';
 }
 
 int Application::OptionsCliPars()
@@ -58,7 +58,10 @@ int Application::OptionsCliPars()
     cli_options.add_options()("file,f", boost::program_options::value<>(&m_export_filename)->default_value("nodeset_export.xml")->required(), "Path with filename to export");
     cli_options.add_options()("username,u", boost::program_options::value<>(&m_user_name), "Authentication username");
     cli_options.add_options()("password,p", boost::program_options::value<>(&m_password), "Authentication password");
-    cli_options.add_options()("maxnrd,m", boost::program_options::value<>(&m_number_of_max_nodes_to_request_data)->default_value(0), "Number of max nodes to request data");
+    cli_options.add_options()("maxnpr", boost::program_options::value<>(&m_max_nodes_per_read)->default_value(0), "Maximum size of the nodesToRead array");
+    cli_options.add_options()("maxnpb", boost::program_options::value<>(&m_max_nodes_per_browse)->default_value(0), "Maximum size of the nodesToBrowse array");
+    cli_options.add_options()(
+        "maxrpn", boost::program_options::value<>(&m_max_references_per_node)->default_value(0), "Maximum number of references to return for each starting Node specified in the request");
     cli_options.add_options()("timeout,t", boost::program_options::value<>(&m_client_timeout)->default_value(client_timeout_default_ms), "Response timeout in ms");
     cli_options.add_options()("perftimer", boost::program_options::value<>(&m_perf_timer)->default_value(false), "Enable the performance timer (true/false)");
     cli_options.add_options()(
@@ -74,7 +77,7 @@ int Application::OptionsCliPars()
     }
     catch (boost::program_options::unknown_option& e) // Error reading command line parameters.
     {
-        std::cout << e.what() << std::endl;
+        std::cout << e.what() << '\n';
         PrintHelp(std::cerr, cli_options);
         return info_print;
     }
@@ -90,7 +93,7 @@ int Application::OptionsCliPars()
         }
         else
         {
-            std::cout << e.what() << std::endl;
+            std::cout << e.what() << '\n';
             PrintHelp(std::cerr, cli_options);
         }
         return info_print;
@@ -157,8 +160,9 @@ void Application::StartExportInAnotherThread()
     std::promise<int> promise;
     m_future_thread_result = promise.get_future();
     m_export_thread = std::thread(
-        [this](std::promise<int>&& return_res)
+        [this](std::promise<int>&& return_res_i)
         {
+            std::promise<int> return_res = std::move(return_res_i);
             try
             {
                 // The first main operation is collecting units for export. Can take a long time.
@@ -168,7 +172,7 @@ void Application::StartExportInAnotherThread()
                 for (const auto& start_node_id_s : m_start_node_ids)
                 {
                     std::vector<UATypesContainer<UA_ExpandedNodeId>> export_node_id_list;
-                    UATypesContainer<UA_ExpandedNodeId> start_node_id(UA_EXPANDEDNODEID(start_node_id_s.data()), UA_TYPES_EXPANDEDNODEID);
+                    UATypesContainer<UA_ExpandedNodeId> const start_node_id(UA_EXPANDEDNODEID(start_node_id_s.data()), UA_TYPES_EXPANDEDNODEID);
                     auto perf_timer = PerformanceTimer();
                     auto client_result = browseoperations::GrabChildNodeIdsFromStartNodeId(m_client, start_node_id, export_node_id_list);
                     m_logger_main.Info("Browsing operation from starting NodeID '{}': {}", start_node_id_s, PerformanceTimer::TimeToString(perf_timer.GetTimeElapsed()));
@@ -262,7 +266,9 @@ int Application::Run()
 
         // Preparing auxiliary export options
         m_opt.logger = m_opc_nodesetexporter_logger;
-        m_opt.number_of_max_nodes_to_request_data = m_number_of_max_nodes_to_request_data;
+        m_opt.max_nodes_per_browse = m_max_nodes_per_browse;
+        m_opt.max_nodes_per_read = m_max_nodes_per_read;
+        m_opt.max_references_per_node = m_max_references_per_node;
         m_opt.internal_log_level = LogLevel::Off; // Internal logger is not used
         m_opt.is_perf_timer_enable = m_perf_timer;
         if (!m_parent_start_node_replacer.empty())
@@ -324,11 +330,7 @@ int Application::Run()
             m_export_thread.join();
         }
 
-        if (m_client != nullptr)
-        {
-            UA_Client_delete(m_client);
-            m_client = nullptr;
-        }
+        UA_Client_delete(m_client);
         m_logger_main.Info("I`m leaving...");
 
 
