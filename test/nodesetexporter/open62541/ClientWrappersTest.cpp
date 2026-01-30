@@ -10,19 +10,20 @@
 #include "LogMacro.h"
 #include "nodesetexporter/common/Statuses.h"
 #include "nodesetexporter/logger/LogPlugin.h"
+#include "nodesetexporter/open62541/TypeAliases.h"
 #include "nodesetexporter/open62541/UATypesContainer.h"
 
 #include "ex_nodeset.h"
 #include <open62541/client_config_default.h>
-#include <open62541/client_highlevel.h>
 #include <open62541/server.h>
 #include <open62541/server_config_default.h>
-// #include <open62541/server/ua_server_internal.h>
+#include <open62541/types.h>
 
 #include <doctest/doctest.h>
 
 #include <condition_variable>
 #include <iostream>
+#include <numeric>
 #include <set>
 #include <thread>
 #include <vector>
@@ -38,10 +39,10 @@ using NodeAttributesRequestResponse = nodesetexporter::interfaces::IOpen62541::N
 using NodeClassesRequestResponse = nodesetexporter::interfaces::IOpen62541::NodeClassesRequestResponse;
 using NodeReferencesRequestResponse = nodesetexporter::interfaces::IOpen62541::NodeReferencesRequestResponse;
 using nodesetexporter::open62541::UATypesContainer;
+using nodesetexporter::open62541::typealiases::MultidimensionalArray;
 using nodesetexporter::open62541::typealiases::VariantsOfAttr;
 using nodesetexporter::open62541::typealiases::VariantsOfAttrToString;
 using namespace std::literals;
-
 
 constexpr auto SERVER_START_TIMEOUT = 10s;
 volatile std::atomic_bool running = true; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
@@ -51,7 +52,7 @@ std::mutex cv_mutex; // NOLINT(cppcoreguidelines-avoid-non-const-global-variable
 
 std::string UaStringToStdString(const UA_String& some_string)
 {
-    return std::string{static_cast<char*>(static_cast<void*>(some_string.data)), some_string.length};
+    return std::string{reinterpret_cast<char*>(some_string.data), some_string.length};
 }
 
 // // Preparing a test server to which the client will connect
@@ -91,7 +92,7 @@ auto OpcUaServerStart()
                 server,
                 [](UA_Server* /*server*/, void*)
                 {
-                    std::lock_guard<std::mutex> locker(cv_mutex);
+                    const std::lock_guard<std::mutex> locker(cv_mutex);
                     cv_server_started.notify_all();
                 },
                 nullptr,
@@ -160,19 +161,77 @@ void CheckAttrValueEqual(UA_AttributeId attr_id, const std::optional<VariantsOfA
         case UA_AttributeId::UA_ATTRIBUTEID_USERACCESSLEVEL: // Byte
             CHECK_EQ(std::get<UA_Byte>(first.value()), std::get<UA_Byte>(second.value()));
             break;
-        case UA_AttributeId::UA_ATTRIBUTEID_VALUE: // UA_Variant
+        case UA_AttributeId::UA_ATTRIBUTEID_VALUE: // VariantsOfAttr(Любые имеющиеся значения)
         {
-            const UA_Variant value1 = std::get<UATypesContainer<UA_Variant>>(first.value()).GetRef();
-            const UA_Variant value2 = std::get<UATypesContainer<UA_Variant>>(second.value()).GetRef();
-            CHECK_EQ(value1.type->typeKind, value2.type->typeKind);
-            CHECK_EQ(UA_calcSizeBinary(&value1, &UA_TYPES[UA_TYPES_VARIANT]), UA_calcSizeBinary(&value2, &UA_TYPES[UA_TYPES_VARIANT]));
-            UA_ByteString b_str1 = {0};
-            UA_ByteString b_str2 = {0};
-            UA_encodeBinary(&value1, &UA_TYPES[UA_TYPES_VARIANT], &b_str1);
-            UA_encodeBinary(&value2, &UA_TYPES[UA_TYPES_VARIANT], &b_str2);
-            CHECK(UA_ByteString_equal(&b_str1, &b_str2));
-            UA_ByteString_clear(&b_str1);
-            UA_ByteString_clear(&b_str2);
+            // Проверка на чтение узла типа Double
+            const auto* value_double_1 = std::get_if<UA_Double>(&first.value());
+            const auto* value_double_2 = std::get_if<UA_Double>(&second.value());
+            if (value_double_1 != nullptr && value_double_2 != nullptr)
+            {
+                CHECK_EQ(*value_double_1, *value_double_2);
+                break;
+            }
+            // Проверка на чтение узла типа String
+            const auto* value_string_1 = std::get_if<UATypesContainer<UA_String>>(&first.value());
+            const auto* value_string_2 = std::get_if<UATypesContainer<UA_String>>(&second.value());
+            if (value_string_1 != nullptr && value_string_2 != nullptr)
+            {
+                CHECK(UA_String_equal(&value_string_1->GetRef(), &value_string_2->GetRef()));
+                break;
+            }
+
+            // Проверка на чтение узла типа Int64
+            const auto* value_int64_tp_1 = std::get_if<UA_Int64>(&first.value());
+            const auto* value_int64_tp_2 = std::get_if<UA_Int64>(&second.value());
+            if (value_int64_tp_1 != nullptr && value_int64_tp_2 != nullptr)
+            {
+                CHECK_EQ(*value_int64_tp_1, *value_int64_tp_2);
+                break;
+            }
+
+            // Проверка на чтение узла типа bool
+            const auto* value_bool_tp_1 = std::get_if<UA_Boolean>(&first.value());
+            const auto* value_bool_tp_2 = std::get_if<UA_Boolean>(&second.value());
+            if (value_bool_tp_1 != nullptr && value_bool_tp_2 != nullptr)
+            {
+                CHECK_EQ(*value_bool_tp_1, *value_bool_tp_2);
+                break;
+            }
+
+            // Проверка на чтение узла типа String array
+            const auto* value_string_arr_tp_1 = std::get_if<MultidimensionalArray<UATypesContainer<UA_String>>>(&first.value());
+            const auto* value_string_arr_tp_2 = std::get_if<MultidimensionalArray<UATypesContainer<UA_String>>>(&second.value());
+            if (value_string_arr_tp_1 != nullptr && value_string_arr_tp_2 != nullptr)
+            {
+                for (size_t index = 0; index < value_string_arr_tp_1->ArrayLength(); ++index)
+                {
+                    CHECK(UA_String_equal(&value_string_arr_tp_1->GetArray().at(index).GetRef(), &value_string_arr_tp_2->GetArray().at(index).GetRef()));
+                }
+                break;
+            }
+
+            // Проверка на чтение узла типа DateTime
+            const auto* value_dt_tp_1 = std::get_if<UATypesContainer<UA_DateTime>>(&first.value());
+            const auto* value_dt_tp_2 = std::get_if<UATypesContainer<UA_DateTime>>(&second.value());
+            if (value_dt_tp_1 != nullptr && value_dt_tp_2 != nullptr)
+            {
+                CHECK_EQ(value_dt_tp_1->GetRef(), value_dt_tp_2->GetRef());
+                break;
+            }
+
+            // Проверка на чтение узла типа UInt32 array
+            const auto* value_uint32_arr_tp_1 = std::get_if<MultidimensionalArray<UA_UInt32>>(&first.value());
+            const auto* value_uint32_arr_tp_2 = std::get_if<MultidimensionalArray<UA_UInt32>>(&second.value());
+            if (value_uint32_arr_tp_1 != nullptr && value_uint32_arr_tp_2 != nullptr)
+            {
+                for (size_t index = 0; index < value_uint32_arr_tp_1->ArrayLength(); ++index)
+                {
+                    CHECK_EQ(value_uint32_arr_tp_1->GetArray().at(index), value_uint32_arr_tp_2->GetArray().at(index));
+                }
+                break;
+            }
+
+            FAIL(true); // Если никакой вариант не пришел
         }
         break;
         case UA_AttributeId::UA_ATTRIBUTEID_VALUERANK: // Int32
@@ -180,9 +239,11 @@ void CheckAttrValueEqual(UA_AttributeId attr_id, const std::optional<VariantsOfA
             break;
         case UA_AttributeId::UA_ATTRIBUTEID_ARRAYDIMENSIONS: // [UInt32]
         {
-            const std::vector<UA_UInt32> vec1 = std::get<std::vector<UA_UInt32>>(first.value());
-            const std::vector<UA_UInt32> vec2 = std::get<std::vector<UA_UInt32>>(second.value());
-            CHECK_EQ(vec1, vec2);
+            const auto vec1 = std::get<MultidimensionalArray<UA_UInt32>>(first.value());
+            const auto vec2 = std::get<MultidimensionalArray<UA_UInt32>>(second.value());
+            CHECK_EQ(vec1.GetArrayDimensions(), vec2.GetArrayDimensions());
+            CHECK_EQ(vec1.ArrayDimensionsLength(), vec2.ArrayDimensionsLength());
+            CHECK_EQ(vec1.GetArray(), vec2.GetArray());
         }
         break;
         case UA_AttributeId::UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL: // Double
@@ -238,17 +299,17 @@ TEST_SUITE("nodesetexporter::open62541")
         REQUIRE_EQ(cv_server_started.wait_until(locker, server_start_timeout), std::cv_status::no_timeout); // I expect the start of the server
         locker.unlock();
 
-        auto* client = UA_Client_new();
-        auto* cli_config = UA_Client_getConfig(client);
         Logger cli_logger("client-test");
-#ifdef OPEN62541_VER_1_3
-        cli_config->logger = LoggerPlugin::Open62541LoggerCreator(cli_logger);
-#elif defined(OPEN62541_VER_1_4)
         auto logging = LoggerPlugin::Open62541LoggerCreator(cli_logger);
-        cli_config->logging = &logging;
-        cli_config->eventLoop->logger = &logging;
+        UA_ClientConfig cli_config = {};
+        UA_ClientConfig_setDefault(&cli_config);
+        auto* client = UA_Client_newWithConfig(&cli_config);
+#ifdef OPEN62541_VER_1_4
+        cli_config.logging = &logging;
+        cli_config.eventLoop->logger = &logging;
+#elif defined(OPEN62541_VER_1_3)
+        cli_config.logger = logging;
 #endif
-        UA_ClientConfig_setDefault(cli_config);
         REQUIRE(UA_StatusCode_isGood(UA_Client_connect(client, "opc.tcp://localhost:4840")));
 
         auto client_wrapper = Open62541ClientWrapper(*client, cli_logger);
@@ -262,87 +323,88 @@ TEST_SUITE("nodesetexporter::open62541")
         };
 
         // For UA_ATTRIBUTEID_VALUE tests
-        auto node_i_2_value = UATypesContainer<UA_Variant>(UA_TYPES_VARIANT);
-        auto* some_scalar = UA_Double_new();
-        *some_scalar = 45.52951; // NOLINT
-        UA_Variant_setScalar(&node_i_2_value.GetRef(), some_scalar, &UA_TYPES[UA_TYPES_DOUBLE]);
+        constexpr UA_Double node_i_2_value = 45.52951; // NOLINT
 
         // Attributes relative to the node class are presented in the mapping table https://www.open62541.org/doc/master/core_concepts.html#information-modelling
         std::map<UA_NodeClass, ReadNodesAtrrubutesTestData> test_nodes_attributes_data{
             {UA_NodeClass::UA_NODECLASS_VARIABLE,
-             {UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID),
-              {
-                  {UA_ATTRIBUTEID_NODECLASS, UA_NodeClass::UA_NODECLASS_VARIABLE}, // mandatory
-                  {UA_ATTRIBUTEID_BROWSENAME, UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(2, "temperature"), UA_TYPES_QUALIFIEDNAME)}, // mandatory
-                  {UA_ATTRIBUTEID_DISPLAYNAME, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "temperature"), UA_TYPES_LOCALIZEDTEXT)}, // mandatory
-                  {UA_ATTRIBUTEID_DESCRIPTION, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description temperature"), UA_TYPES_LOCALIZEDTEXT)}, // optional
-                  {UA_ATTRIBUTEID_WRITEMASK, static_cast<UA_UInt32>(0)}, // optional
-                  {UA_ATTRIBUTEID_USERWRITEMASK, static_cast<UA_UInt32>(0)}, // optional
-                  {UA_ATTRIBUTEID_VALUE, std::optional<VariantsOfAttr>{VariantsOfAttr(node_i_2_value)}}, // mandatory
-                  {UA_ATTRIBUTEID_DATATYPE, UATypesContainer<UA_NodeId>(UA_NODEID("i=11"), UA_TYPES_NODEID)}, // mandatory
-                  {UA_ATTRIBUTEID_VALUERANK, static_cast<UA_Int32>(UA_VALUERANK_ANY)}, // mandatory
-                  {UA_ATTRIBUTEID_ARRAYDIMENSIONS, std::nullopt}, // optional
-                  {UA_ATTRIBUTEID_ACCESSLEVEL, static_cast<UA_Byte>(UA_ACCESSLEVELMASK_READ)}, // mandatory
-                  {UA_ATTRIBUTEID_USERACCESSLEVEL, static_cast<UA_Byte>(UA_ACCESSLEVELMASK_READ)}, // mandatory
-                  {UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL, static_cast<UA_Double>(0)}, // optional
-                  {UA_ATTRIBUTEID_HISTORIZING, static_cast<UA_Boolean>(false)}, // mandatory
-                  {UA_ATTRIBUTEID_INVERSENAME, std::nullopt}, // none
-                  {UA_ATTRIBUTEID_EVENTNOTIFIER, std::nullopt}, // none
-              },
-              UA_TYPES_DOUBLE}},
+             {.node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID),
+              .attrs_results =
+                  {
+                      {UA_ATTRIBUTEID_NODECLASS, UA_NodeClass::UA_NODECLASS_VARIABLE}, // mandatory
+                      {UA_ATTRIBUTEID_BROWSENAME, UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(2, "temperature"), UA_TYPES_QUALIFIEDNAME)}, // mandatory
+                      {UA_ATTRIBUTEID_DISPLAYNAME, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "temperature"), UA_TYPES_LOCALIZEDTEXT)}, // mandatory
+                      {UA_ATTRIBUTEID_DESCRIPTION, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description temperature"), UA_TYPES_LOCALIZEDTEXT)}, // optional
+                      {UA_ATTRIBUTEID_WRITEMASK, static_cast<UA_UInt32>(0)}, // optional
+                      {UA_ATTRIBUTEID_USERWRITEMASK, static_cast<UA_UInt32>(0)}, // optional
+                      {UA_ATTRIBUTEID_VALUE, std::optional<VariantsOfAttr>{VariantsOfAttr(node_i_2_value)}}, // mandatory
+                      {UA_ATTRIBUTEID_DATATYPE, UATypesContainer<UA_NodeId>(UA_NODEID("i=11"), UA_TYPES_NODEID)}, // mandatory
+                      {UA_ATTRIBUTEID_VALUERANK, static_cast<UA_Int32>(UA_VALUERANK_ANY)}, // mandatory
+                      {UA_ATTRIBUTEID_ARRAYDIMENSIONS, std::nullopt}, // optional
+                      {UA_ATTRIBUTEID_ACCESSLEVEL, static_cast<UA_Byte>(UA_ACCESSLEVELMASK_READ)}, // mandatory
+                      {UA_ATTRIBUTEID_USERACCESSLEVEL, static_cast<UA_Byte>(UA_ACCESSLEVELMASK_READ)}, // mandatory
+                      {UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL, static_cast<UA_Double>(0)}, // optional
+                      {UA_ATTRIBUTEID_HISTORIZING, static_cast<UA_Boolean>(false)}, // mandatory
+                      {UA_ATTRIBUTEID_INVERSENAME, std::nullopt}, // none
+                      {UA_ATTRIBUTEID_EVENTNOTIFIER, std::nullopt}, // none
+                  },
+              .type_of_ua_variant_data = UA_TYPES_DOUBLE}},
             {UA_NodeClass::UA_NODECLASS_OBJECT,
-             {UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID),
-              {
-                  {UA_ATTRIBUTEID_NODECLASS, UA_NodeClass::UA_NODECLASS_OBJECT}, // mandatory
-                  {UA_ATTRIBUTEID_BROWSENAME, UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(2, "vPLC1"), UA_TYPES_QUALIFIEDNAME)}, // mandatory
-                  {UA_ATTRIBUTEID_DISPLAYNAME, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "vPLC1"), UA_TYPES_LOCALIZEDTEXT)}, // mandatory
-                  {UA_ATTRIBUTEID_DESCRIPTION, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description vPLC1"), UA_TYPES_LOCALIZEDTEXT)}, // optional
-                  {UA_ATTRIBUTEID_WRITEMASK, static_cast<UA_UInt32>(0)}, // optional
-                  {UA_ATTRIBUTEID_USERWRITEMASK, static_cast<UA_UInt32>(0)}, // optional
-                  {UA_ATTRIBUTEID_EVENTNOTIFIER, static_cast<UA_Byte>(UA_EVENTNOTIFIERTYPE_NONE)}, // mandatory
-                  {UA_ATTRIBUTEID_ISABSTRACT, std::nullopt}, // none
-                  {UA_ATTRIBUTEID_VALUE, std::nullopt}, // none
-                  {UA_ATTRIBUTEID_DATATYPE, std::nullopt}, // none
-                  {UA_ATTRIBUTEID_VALUERANK, std::nullopt}, // none
-                  {UA_ATTRIBUTEID_ARRAYDIMENSIONS, std::nullopt}, // none
-                  {UA_ATTRIBUTEID_HISTORIZING, std::nullopt}, // none
-                  {UA_ATTRIBUTEID_INVERSENAME, std::nullopt}, // none
-              },
-              0}},
+             {.node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID),
+              .attrs_results =
+                  {
+                      {UA_ATTRIBUTEID_NODECLASS, UA_NodeClass::UA_NODECLASS_OBJECT}, // mandatory
+                      {UA_ATTRIBUTEID_BROWSENAME, UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(2, "vPLC1"), UA_TYPES_QUALIFIEDNAME)}, // mandatory
+                      {UA_ATTRIBUTEID_DISPLAYNAME, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "vPLC1"), UA_TYPES_LOCALIZEDTEXT)}, // mandatory
+                      {UA_ATTRIBUTEID_DESCRIPTION, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description vPLC1"), UA_TYPES_LOCALIZEDTEXT)}, // optional
+                      {UA_ATTRIBUTEID_WRITEMASK, static_cast<UA_UInt32>(0)}, // optional
+                      {UA_ATTRIBUTEID_USERWRITEMASK, static_cast<UA_UInt32>(0)}, // optional
+                      {UA_ATTRIBUTEID_EVENTNOTIFIER, static_cast<UA_Byte>(UA_EVENTNOTIFIERTYPE_NONE)}, // mandatory
+                      {UA_ATTRIBUTEID_ISABSTRACT, std::nullopt}, // none
+                      {UA_ATTRIBUTEID_VALUE, std::nullopt}, // none
+                      {UA_ATTRIBUTEID_DATATYPE, std::nullopt}, // none
+                      {UA_ATTRIBUTEID_VALUERANK, std::nullopt}, // none
+                      {UA_ATTRIBUTEID_ARRAYDIMENSIONS, std::nullopt}, // none
+                      {UA_ATTRIBUTEID_HISTORIZING, std::nullopt}, // none
+                      {UA_ATTRIBUTEID_INVERSENAME, std::nullopt}, // none
+                  },
+              .type_of_ua_variant_data = 0}},
             {UA_NodeClass::UA_NODECLASS_METHOD,
-             {UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=12"), UA_TYPES_EXPANDEDNODEID),
-              {
-                  {UA_ATTRIBUTEID_NODECLASS, UA_NodeClass::UA_NODECLASS_METHOD}, // mandatory
-                  {UA_ATTRIBUTEID_BROWSENAME, UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(2, "TestMethod"), UA_TYPES_QUALIFIEDNAME)}, // mandatory
-                  {UA_ATTRIBUTEID_DISPLAYNAME, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "TestMethod"), UA_TYPES_LOCALIZEDTEXT)}, // mandatory
-                  {UA_ATTRIBUTEID_DESCRIPTION, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description TestMethod"), UA_TYPES_LOCALIZEDTEXT)}, // optional
-                  {UA_ATTRIBUTEID_WRITEMASK, static_cast<UA_UInt32>(0)}, // mandatory-optional
-                  {UA_ATTRIBUTEID_USERWRITEMASK, static_cast<UA_UInt32>(0)}, // optional
-                  {UA_ATTRIBUTEID_EVENTNOTIFIER, std::nullopt}, // mandatory
-                  {UA_ATTRIBUTEID_VALUERANK, std::nullopt}, // mandatory
-                  {UA_ATTRIBUTEID_ACCESSLEVEL, std::nullopt}, // mandatory
-                  {UA_ATTRIBUTEID_EXECUTABLE, static_cast<UA_Boolean>(true)}, // mandatory
-                  {UA_ATTRIBUTEID_USEREXECUTABLE, static_cast<UA_Boolean>(true)}, // mandatory
-                  {UA_ATTRIBUTEID_VALUE, std::nullopt}, // none
-                  {UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL, std::nullopt}, // none
-                  {UA_ATTRIBUTEID_DATATYPEDEFINITION, std::nullopt}, // none
-              },
-              0}},
+             {.node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=12"), UA_TYPES_EXPANDEDNODEID),
+              .attrs_results =
+                  {
+                      {UA_ATTRIBUTEID_NODECLASS, UA_NodeClass::UA_NODECLASS_METHOD}, // mandatory
+                      {UA_ATTRIBUTEID_BROWSENAME, UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(2, "TestMethod"), UA_TYPES_QUALIFIEDNAME)}, // mandatory
+                      {UA_ATTRIBUTEID_DISPLAYNAME, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "TestMethod"), UA_TYPES_LOCALIZEDTEXT)}, // mandatory
+                      {UA_ATTRIBUTEID_DESCRIPTION, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description TestMethod"), UA_TYPES_LOCALIZEDTEXT)}, // optional
+                      {UA_ATTRIBUTEID_WRITEMASK, static_cast<UA_UInt32>(0)}, // mandatory-optional
+                      {UA_ATTRIBUTEID_USERWRITEMASK, static_cast<UA_UInt32>(0)}, // optional
+                      {UA_ATTRIBUTEID_EVENTNOTIFIER, std::nullopt}, // mandatory
+                      {UA_ATTRIBUTEID_VALUERANK, std::nullopt}, // mandatory
+                      {UA_ATTRIBUTEID_ACCESSLEVEL, std::nullopt}, // mandatory
+                      {UA_ATTRIBUTEID_EXECUTABLE, static_cast<UA_Boolean>(true)}, // mandatory
+                      {UA_ATTRIBUTEID_USEREXECUTABLE, static_cast<UA_Boolean>(true)}, // mandatory
+                      {UA_ATTRIBUTEID_VALUE, std::nullopt}, // none
+                      {UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL, std::nullopt}, // none
+                      {UA_ATTRIBUTEID_DATATYPEDEFINITION, std::nullopt}, // none
+                  },
+              .type_of_ua_variant_data = 0}},
             {UA_NodeClass::UA_NODECLASS_DATATYPE,
-             {UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=21"), UA_TYPES_EXPANDEDNODEID),
-              {
-                  {UA_ATTRIBUTEID_NODECLASS, UA_NodeClass::UA_NODECLASS_DATATYPE}, // mandatory
-                  {UA_ATTRIBUTEID_BROWSENAME, UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(2, "Union"), UA_TYPES_QUALIFIEDNAME)}, // mandatory
-                  {UA_ATTRIBUTEID_DISPLAYNAME, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Union"), UA_TYPES_LOCALIZEDTEXT)}, // mandatory
-                  {UA_ATTRIBUTEID_DESCRIPTION, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description Union"), UA_TYPES_LOCALIZEDTEXT)}, // optional
-                  {UA_ATTRIBUTEID_WRITEMASK, static_cast<UA_UInt32>(0)}, // optional
-                  {UA_ATTRIBUTEID_USERWRITEMASK, static_cast<UA_UInt32>(0)}, // optional
-                  {UA_ATTRIBUTEID_ISABSTRACT, static_cast<UA_Boolean>(true)}, // mandatory
-                  {UA_ATTRIBUTEID_DATATYPEDEFINITION, std::nullopt}, // optional
-                  {UA_ATTRIBUTEID_EXECUTABLE, std::nullopt}, // none
-                  {UA_ATTRIBUTEID_VALUE, std::nullopt}, // none
-              },
-              0}}};
+             {.node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=21"), UA_TYPES_EXPANDEDNODEID),
+              .attrs_results =
+                  {
+                      {UA_ATTRIBUTEID_NODECLASS, UA_NodeClass::UA_NODECLASS_DATATYPE}, // mandatory
+                      {UA_ATTRIBUTEID_BROWSENAME, UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(2, "Union"), UA_TYPES_QUALIFIEDNAME)}, // mandatory
+                      {UA_ATTRIBUTEID_DISPLAYNAME, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Union"), UA_TYPES_LOCALIZEDTEXT)}, // mandatory
+                      {UA_ATTRIBUTEID_DESCRIPTION, UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description Union"), UA_TYPES_LOCALIZEDTEXT)}, // optional
+                      {UA_ATTRIBUTEID_WRITEMASK, static_cast<UA_UInt32>(0)}, // optional
+                      {UA_ATTRIBUTEID_USERWRITEMASK, static_cast<UA_UInt32>(0)}, // optional
+                      {UA_ATTRIBUTEID_ISABSTRACT, static_cast<UA_Boolean>(true)}, // mandatory
+                      {UA_ATTRIBUTEID_DATATYPEDEFINITION, std::nullopt}, // optional
+                      {UA_ATTRIBUTEID_EXECUTABLE, std::nullopt}, // none
+                      {UA_ATTRIBUTEID_VALUE, std::nullopt}, // none
+                  },
+              .type_of_ua_variant_data = 0}}};
 
         struct ReadNodeDataValueTestData
         {
@@ -351,10 +413,12 @@ TEST_SUITE("nodesetexporter::open62541")
             std::variant<std::string, UA_Double, UA_Int64> result{};
         };
         std::map<std::string, ReadNodeDataValueTestData> test_read_node_data_val{
-            {"UA_TYPES_STRING", {UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=4"), UA_TYPES_EXPANDEDNODEID), UA_TYPES_STRING, "speed"}},
-            {"UA_TYPES_DOUBLE", {UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID), UA_TYPES_DOUBLE, 45.52951}},
-            {"UA_TYPES_INT64", {UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=18"), UA_TYPES_EXPANDEDNODEID), UA_TYPES_INT64, 9953}},
-            {"NO_DATA", {UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID), 0, 0}}};
+            {"UA_TYPES_STRING",
+             {.node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=4"), UA_TYPES_EXPANDEDNODEID), .type_of_ua_variant_data = UA_TYPES_STRING, .result = "speed"}},
+            {"UA_TYPES_DOUBLE",
+             {.node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID), .type_of_ua_variant_data = UA_TYPES_DOUBLE, .result = 45.52951}},
+            {"UA_TYPES_INT64", {.node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=18"), UA_TYPES_EXPANDEDNODEID), .type_of_ua_variant_data = UA_TYPES_INT64, .result = 9953}},
+            {"NO_DATA", {.node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID), .type_of_ua_variant_data = 0, .result = 0}}};
 
 #pragma region for the ReadNodeReferences test
         std::vector<NodeReferencesRequestResponse> test_node_references_structure_lists;
@@ -366,112 +430,112 @@ TEST_SUITE("nodesetexporter::open62541")
         test_node_references_structure_lists.emplace_back(NodeReferencesRequestResponse{
             test_parent_node1,
             {UATypesContainer<UA_ReferenceDescription>(
-                 {UA_NODEID("i=47"),
-                  false,
-                  UA_EXPANDEDNODEID("ns=2;i=9"),
-                  UA_QUALIFIEDNAME(2, "myNewStaticObject1_1"),
-                  UA_LOCALIZEDTEXT("", "myNewStaticObject1_1"),
-                  UA_NodeClass::UA_NODECLASS_OBJECT,
-                  UA_EXPANDEDNODEID("i=58")},
+                 {.referenceTypeId = UA_NODEID("i=47"),
+                  .isForward = false,
+                  .nodeId = UA_EXPANDEDNODEID("ns=2;i=9"),
+                  .browseName = UA_QUALIFIEDNAME(2, "myNewStaticObject1_1"),
+                  .displayName = UA_LOCALIZEDTEXT("", "myNewStaticObject1_1"),
+                  .nodeClass = UA_NodeClass::UA_NODECLASS_OBJECT,
+                  .typeDefinition = UA_EXPANDEDNODEID("i=58")},
                  UA_TYPES_REFERENCEDESCRIPTION),
              UATypesContainer<UA_ReferenceDescription>(
-                 {UA_NODEID("i=40"),
-                  true,
-                  UA_EXPANDEDNODEID("i=58"),
-                  UA_QUALIFIEDNAME(0, "BaseObjectType"),
-                  UA_LOCALIZEDTEXT("", "BaseObjectType"),
-                  UA_NodeClass::UA_NODECLASS_OBJECTTYPE,
-                  UA_EXPANDEDNODEID("i=0")},
+                 {.referenceTypeId = UA_NODEID("i=40"),
+                  .isForward = true,
+                  .nodeId = UA_EXPANDEDNODEID("i=58"),
+                  .browseName = UA_QUALIFIEDNAME(0, "BaseObjectType"),
+                  .displayName = UA_LOCALIZEDTEXT("", "BaseObjectType"),
+                  .nodeClass = UA_NodeClass::UA_NODECLASS_OBJECTTYPE,
+                  .typeDefinition = UA_EXPANDEDNODEID("i=0")},
                  UA_TYPES_REFERENCEDESCRIPTION),
              UATypesContainer<UA_ReferenceDescription>(
-                 {UA_NODEID("i=46"),
-                  true,
-                  UA_EXPANDEDNODEID("ns=2;i=16"),
-                  UA_QUALIFIEDNAME(2, "MyProperty2"),
-                  UA_LOCALIZEDTEXT("", "MyProperty2"),
-                  UA_NodeClass::UA_NODECLASS_VARIABLE,
-                  UA_EXPANDEDNODEID("i=68")},
+                 {.referenceTypeId = UA_NODEID("i=46"),
+                  .isForward = true,
+                  .nodeId = UA_EXPANDEDNODEID("ns=2;i=16"),
+                  .browseName = UA_QUALIFIEDNAME(2, "MyProperty2"),
+                  .displayName = UA_LOCALIZEDTEXT("", "MyProperty2"),
+                  .nodeClass = UA_NodeClass::UA_NODECLASS_VARIABLE,
+                  .typeDefinition = UA_EXPANDEDNODEID("i=68")},
                  UA_TYPES_REFERENCEDESCRIPTION)}});
 
         test_node_references_structure_lists.emplace_back(NodeReferencesRequestResponse{
             test_parent_node2,
             {UATypesContainer<UA_ReferenceDescription>(
-                 {UA_NODEID("i=47"),
-                  false,
-                  UA_EXPANDEDNODEID("ns=2;i=5"),
-                  UA_QUALIFIEDNAME(2, "myNewStaticObject1"),
-                  UA_LOCALIZEDTEXT("", "myNewStaticObject1"),
-                  UA_NodeClass::UA_NODECLASS_OBJECT,
-                  UA_EXPANDEDNODEID("i=58")},
+                 {.referenceTypeId = UA_NODEID("i=47"),
+                  .isForward = false,
+                  .nodeId = UA_EXPANDEDNODEID("ns=2;i=5"),
+                  .browseName = UA_QUALIFIEDNAME(2, "myNewStaticObject1"),
+                  .displayName = UA_LOCALIZEDTEXT("", "myNewStaticObject1"),
+                  .nodeClass = UA_NodeClass::UA_NODECLASS_OBJECT,
+                  .typeDefinition = UA_EXPANDEDNODEID("i=58")},
                  UA_TYPES_REFERENCEDESCRIPTION),
              UATypesContainer<UA_ReferenceDescription>(
-                 {UA_NODEID("i=40"),
-                  true,
-                  UA_EXPANDEDNODEID("i=63"),
-                  UA_QUALIFIEDNAME(0, "BaseDataVariableType"),
-                  UA_LOCALIZEDTEXT("", "BaseDataVariableType"),
-                  UA_NodeClass::UA_NODECLASS_VARIABLETYPE,
-                  UA_EXPANDEDNODEID("i=0")},
+                 {.referenceTypeId = UA_NODEID("i=40"),
+                  .isForward = true,
+                  .nodeId = UA_EXPANDEDNODEID("i=63"),
+                  .browseName = UA_QUALIFIEDNAME(0, "BaseDataVariableType"),
+                  .displayName = UA_LOCALIZEDTEXT("", "BaseDataVariableType"),
+                  .nodeClass = UA_NodeClass::UA_NODECLASS_VARIABLETYPE,
+                  .typeDefinition = UA_EXPANDEDNODEID("i=0")},
                  UA_TYPES_REFERENCEDESCRIPTION)}});
 
         test_node_references_structure_lists.emplace_back(NodeReferencesRequestResponse{
             test_parent_node3,
             {UATypesContainer<UA_ReferenceDescription>(
-                {UA_NODEID("i=45"),
-                 false,
-                 UA_EXPANDEDNODEID("i=22"),
-                 UA_QUALIFIEDNAME(0, "Structure"),
-                 UA_LOCALIZEDTEXT("", "Structure"),
-                 UA_NodeClass::UA_NODECLASS_DATATYPE,
-                 UA_EXPANDEDNODEID("i=0")},
+                {.referenceTypeId = UA_NODEID("i=45"),
+                 .isForward = false,
+                 .nodeId = UA_EXPANDEDNODEID("i=22"),
+                 .browseName = UA_QUALIFIEDNAME(0, "Structure"),
+                 .displayName = UA_LOCALIZEDTEXT("", "Structure"),
+                 .nodeClass = UA_NodeClass::UA_NODECLASS_DATATYPE,
+                 .typeDefinition = UA_EXPANDEDNODEID("i=0")},
                 UA_TYPES_REFERENCEDESCRIPTION)}});
 
         test_node_references_structure_lists.emplace_back(NodeReferencesRequestResponse{
             test_parent_node4,
             {UATypesContainer<UA_ReferenceDescription>(
-                 {UA_NODEID("i=47"),
-                  false,
-                  UA_EXPANDEDNODEID("ns=2;i=5"),
-                  UA_QUALIFIEDNAME(2, "myNewStaticObject1"),
-                  UA_LOCALIZEDTEXT("", "myNewStaticObject1"),
-                  UA_NodeClass::UA_NODECLASS_OBJECT,
-                  UA_EXPANDEDNODEID("i=58")},
+                 {.referenceTypeId = UA_NODEID("i=47"),
+                  .isForward = false,
+                  .nodeId = UA_EXPANDEDNODEID("ns=2;i=5"),
+                  .browseName = UA_QUALIFIEDNAME(2, "myNewStaticObject1"),
+                  .displayName = UA_LOCALIZEDTEXT("", "myNewStaticObject1"),
+                  .nodeClass = UA_NodeClass::UA_NODECLASS_OBJECT,
+                  .typeDefinition = UA_EXPANDEDNODEID("i=58")},
                  UA_TYPES_REFERENCEDESCRIPTION),
              UATypesContainer<UA_ReferenceDescription>(
-                 {UA_NODEID("i=40"),
-                  true,
-                  UA_EXPANDEDNODEID("i=58"),
-                  UA_QUALIFIEDNAME(0, "BaseObjectType"),
-                  UA_LOCALIZEDTEXT("", "BaseObjectType"),
-                  UA_NodeClass::UA_NODECLASS_OBJECTTYPE,
-                  UA_EXPANDEDNODEID("i=0")},
+                 {.referenceTypeId = UA_NODEID("i=40"),
+                  .isForward = true,
+                  .nodeId = UA_EXPANDEDNODEID("i=58"),
+                  .browseName = UA_QUALIFIEDNAME(0, "BaseObjectType"),
+                  .displayName = UA_LOCALIZEDTEXT("", "BaseObjectType"),
+                  .nodeClass = UA_NodeClass::UA_NODECLASS_OBJECTTYPE,
+                  .typeDefinition = UA_EXPANDEDNODEID("i=0")},
                  UA_TYPES_REFERENCEDESCRIPTION),
              UATypesContainer<UA_ReferenceDescription>(
-                 {UA_NODEID("i=47"),
-                  true,
-                  UA_EXPANDEDNODEID("ns=2;i=20"),
-                  UA_QUALIFIEDNAME(2, "static_param3"),
-                  UA_LOCALIZEDTEXT("", "static_param3"),
-                  UA_NodeClass::UA_NODECLASS_VARIABLE,
-                  UA_EXPANDEDNODEID("i=63")},
+                 {.referenceTypeId = UA_NODEID("i=47"),
+                  .isForward = true,
+                  .nodeId = UA_EXPANDEDNODEID("ns=2;i=20"),
+                  .browseName = UA_QUALIFIEDNAME(2, "static_param3"),
+                  .displayName = UA_LOCALIZEDTEXT("", "static_param3"),
+                  .nodeClass = UA_NodeClass::UA_NODECLASS_VARIABLE,
+                  .typeDefinition = UA_EXPANDEDNODEID("i=63")},
                  UA_TYPES_REFERENCEDESCRIPTION),
              UATypesContainer<UA_ReferenceDescription>(
-                 {UA_NODEID("i=47"),
-                  true,
-                  UA_EXPANDEDNODEID("ns=2;i=19"),
-                  UA_QUALIFIEDNAME(2, "static_text_param2"),
-                  UA_LOCALIZEDTEXT("", "static_text_param2"),
-                  UA_NodeClass::UA_NODECLASS_VARIABLE,
-                  UA_EXPANDEDNODEID("i=63")},
+                 {.referenceTypeId = UA_NODEID("i=47"),
+                  .isForward = true,
+                  .nodeId = UA_EXPANDEDNODEID("ns=2;i=19"),
+                  .browseName = UA_QUALIFIEDNAME(2, "static_text_param2"),
+                  .displayName = UA_LOCALIZEDTEXT("", "static_text_param2"),
+                  .nodeClass = UA_NodeClass::UA_NODECLASS_VARIABLE,
+                  .typeDefinition = UA_EXPANDEDNODEID("i=63")},
                  UA_TYPES_REFERENCEDESCRIPTION),
              UATypesContainer<UA_ReferenceDescription>(
-                 {UA_NODEID("i=47"),
-                  true,
-                  UA_EXPANDEDNODEID("ns=2;i=18"),
-                  UA_QUALIFIEDNAME(2, "static_param1"),
-                  UA_LOCALIZEDTEXT("", "static_param1"),
-                  UA_NodeClass::UA_NODECLASS_VARIABLE,
-                  UA_EXPANDEDNODEID("i=63")},
+                 {.referenceTypeId = UA_NODEID("i=47"),
+                  .isForward = true,
+                  .nodeId = UA_EXPANDEDNODEID("ns=2;i=18"),
+                  .browseName = UA_QUALIFIEDNAME(2, "static_param1"),
+                  .displayName = UA_LOCALIZEDTEXT("", "static_param1"),
+                  .nodeClass = UA_NodeClass::UA_NODECLASS_VARIABLE,
+                  .typeDefinition = UA_EXPANDEDNODEID("i=63")},
                  UA_TYPES_REFERENCEDESCRIPTION)}});
 #pragma endregion for the ReadNodeReferences test
 
@@ -486,12 +550,12 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("Requesting single node links")
             {
                 // Preparing the Query Array
-                node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node1));
+                node_references_structure_lists.emplace_back(test_parent_node1);
                 // Query
                 CHECK_EQ(client_wrapper.ReadNodeReferences(node_references_structure_lists).GetStatus(), StatusResults::Good);
                 // Reconciliation of results
                 size_t index = 0;
-                MESSAGE("parent node_id: ", test_node_references_structure_lists.at(0).exp_node_id.ToString());
+                MESSAGE("parent node_id: ", test_node_references_structure_lists.at(0).exp_node_id.get().ToString());
                 for (const auto& test_ref : test_node_references_structure_lists.at(0).references)
                 {
                     MESSAGE("\nRESULT DATA: ", node_references_structure_lists.at(0).references.at(index).ToString(), "\nTEST DATA: ", test_ref.ToString());
@@ -505,10 +569,10 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("Querying multiple node links")
             {
                 // Preparing the Query Array
-                node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node1));
-                node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node2));
-                node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node3));
-                node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node4));
+                node_references_structure_lists.emplace_back(test_parent_node1);
+                node_references_structure_lists.emplace_back(test_parent_node2);
+                node_references_structure_lists.emplace_back(test_parent_node3);
+                node_references_structure_lists.emplace_back(test_parent_node4);
                 // Query
                 CHECK_EQ(client_wrapper.ReadNodeReferences(node_references_structure_lists).GetStatus(), StatusResults::Good);
                 // Reconciliation of results
@@ -516,7 +580,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 for (const auto& test_parent_node_id : test_node_references_structure_lists)
                 {
                     size_t ref_index = 0;
-                    MESSAGE("parent node_id: ", test_parent_node_id.exp_node_id.ToString());
+                    MESSAGE("parent node_id: ", test_parent_node_id.exp_node_id.get().ToString());
                     for (const auto& test_ref : test_parent_node_id.references)
                     {
                         MESSAGE("\nRESULT DATA: ", node_references_structure_lists.at(parent_node_id_index).references.at(ref_index).ToString(), "\nTEST DATA: ", test_ref.ToString());
@@ -532,10 +596,10 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("Request multi-site references with RequestedMaxReferencesPerNode = 1")
             {
                 // Preparing the Query Array
-                node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node1));
-                node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node2));
-                node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node3));
-                node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node4));
+                node_references_structure_lists.emplace_back(test_parent_node1);
+                node_references_structure_lists.emplace_back(test_parent_node2);
+                node_references_structure_lists.emplace_back(test_parent_node3);
+                node_references_structure_lists.emplace_back(test_parent_node4);
                 // Query
                 client_wrapper.SetRequestedMaxReferencesPerNode(1);
                 CHECK_EQ(client_wrapper.ReadNodeReferences(node_references_structure_lists).GetStatus(), StatusResults::Good);
@@ -544,7 +608,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 for (const auto& test_parent_node_id : test_node_references_structure_lists)
                 {
                     size_t ref_index = 0;
-                    MESSAGE("parent node_id: ", test_parent_node_id.exp_node_id.ToString());
+                    MESSAGE("parent node_id: ", test_parent_node_id.exp_node_id.get().ToString());
                     for (const auto& test_ref : test_parent_node_id.references)
                     {
                         MESSAGE("\nRESULT DATA: ", node_references_structure_lists.at(parent_node_id_index).references.at(ref_index).ToString(), "\nTEST DATA: ", test_ref.ToString());
@@ -562,10 +626,10 @@ TEST_SUITE("nodesetexporter::open62541")
                 for (size_t count_of_ref_per_node = 0; count_of_ref_per_node <= 5; count_of_ref_per_node++)
                 {
                     // Preparing the Query Array
-                    node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node1));
-                    node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node2));
-                    node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node3));
-                    node_references_structure_lists.emplace_back(NodeReferencesRequestResponse(test_parent_node4));
+                    node_references_structure_lists.emplace_back(test_parent_node1);
+                    node_references_structure_lists.emplace_back(test_parent_node2);
+                    node_references_structure_lists.emplace_back(test_parent_node3);
+                    node_references_structure_lists.emplace_back(test_parent_node4);
                     // Query
                     client_wrapper.SetRequestedMaxReferencesPerNode(count_of_ref_per_node);
                     CHECK_EQ(client_wrapper.GetRequestedMaxReferencesPerNode(), count_of_ref_per_node);
@@ -575,7 +639,7 @@ TEST_SUITE("nodesetexporter::open62541")
                     for (const auto& test_parent_node_id : test_node_references_structure_lists)
                     {
                         size_t ref_index = 0;
-                        MESSAGE("parent node_id: ", test_parent_node_id.exp_node_id.ToString());
+                        MESSAGE("parent node_id: ", test_parent_node_id.exp_node_id.get().ToString());
                         for (const auto& test_ref : test_parent_node_id.references)
                         {
                             MESSAGE("\nRESULT DATA: ", node_references_structure_lists.at(parent_node_id_index).references.at(ref_index).ToString(), "\nTEST DATA: ", test_ref.ToString());
@@ -601,7 +665,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 // Preparing the Query Array
                 for (const auto& node_test : test_nodes_attributes_data)
                 {
-                    node_class_structure_lists.emplace_back(NodeClassesRequestResponse{node_test.second.node_id});
+                    node_class_structure_lists.emplace_back(node_test.second.node_id);
                 }
                 // Query
                 CHECK_EQ(client_wrapper.ReadNodeClasses(node_class_structure_lists).GetStatus(), StatusResults::Good);
@@ -623,16 +687,16 @@ TEST_SUITE("nodesetexporter::open62541")
                 const auto node2 = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=501"), UA_TYPES_EXPANDEDNODEID);
                 const auto node3 = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=502"), UA_TYPES_EXPANDEDNODEID);
                 const auto node4 = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=503"), UA_TYPES_EXPANDEDNODEID);
-                node_class_structure_lists.emplace_back(NodeClassesRequestResponse(node1));
-                node_class_structure_lists.emplace_back(NodeClassesRequestResponse(node2));
-                node_class_structure_lists.emplace_back(NodeClassesRequestResponse(node3));
-                node_class_structure_lists.emplace_back(NodeClassesRequestResponse(node4));
-                // Query
+                node_class_structure_lists.emplace_back(node1);
+                node_class_structure_lists.emplace_back(node2);
+                node_class_structure_lists.emplace_back(node3);
+                node_class_structure_lists.emplace_back(node4);
+                // Запрос
                 CHECK_EQ(client_wrapper.ReadNodeClasses(node_class_structure_lists).GetStatus(), StatusResults::Good);
-                // Reconciliation of results
+                // Сверка результатов
                 for (const auto& node_class_rr : node_class_structure_lists)
                 {
-                    MESSAGE("node_id: ", node_class_rr.exp_node_id.ToString(), " node class: ", node_class_rr.node_class, " should be: ", UA_NodeClass::UA_NODECLASS_UNSPECIFIED);
+                    MESSAGE("node_id: ", node_class_rr.exp_node_id.get().ToString(), " node class: ", node_class_rr.node_class, " should be: ", UA_NodeClass::UA_NODECLASS_UNSPECIFIED);
                     CHECK_EQ(node_class_rr.node_class, UA_NodeClass::UA_NODECLASS_UNSPECIFIED);
                 }
             }
@@ -693,8 +757,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(UA_NodeClass::UA_NODECLASS_VARIABLE);
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_NODECLASS, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_NODECLASS, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_NODECLASS).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_NODECLASS).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_NODECLASS, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_NODECLASS));
@@ -705,8 +769,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(2, "temperature"), UA_TYPES_QUALIFIEDNAME));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_BROWSENAME, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_BROWSENAME, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_BROWSENAME).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_BROWSENAME).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_BROWSENAME, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_BROWSENAME));
@@ -717,8 +781,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "temperature"), UA_TYPES_LOCALIZEDTEXT));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_DISPLAYNAME, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_DISPLAYNAME, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DISPLAYNAME).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DISPLAYNAME).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_DISPLAYNAME, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DISPLAYNAME));
@@ -729,8 +793,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description temperature"), UA_TYPES_LOCALIZEDTEXT));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_DESCRIPTION, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_DESCRIPTION, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DESCRIPTION).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DESCRIPTION).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_DESCRIPTION, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DESCRIPTION));
@@ -741,8 +805,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(static_cast<UA_UInt32>(0));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_WRITEMASK, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_WRITEMASK, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_WRITEMASK).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_WRITEMASK).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_WRITEMASK, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_WRITEMASK));
@@ -753,8 +817,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(static_cast<UA_UInt32>(0));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_USERWRITEMASK, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_USERWRITEMASK, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USERWRITEMASK).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USERWRITEMASK).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_USERWRITEMASK, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USERWRITEMASK));
@@ -765,8 +829,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(static_cast<UA_Boolean>(true));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=21"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_ISABSTRACT, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_ISABSTRACT, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ISABSTRACT).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ISABSTRACT).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_ISABSTRACT, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ISABSTRACT));
@@ -777,8 +841,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(static_cast<UA_Boolean>(true));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=28"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_SYMMETRIC, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_SYMMETRIC, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_SYMMETRIC).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_SYMMETRIC).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_SYMMETRIC, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_SYMMETRIC));
@@ -789,8 +853,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "EventSourceOf"), UA_TYPES_LOCALIZEDTEXT));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=29"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_INVERSENAME, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_INVERSENAME, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_INVERSENAME).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_INVERSENAME).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_INVERSENAME, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_INVERSENAME));
@@ -798,10 +862,10 @@ TEST_SUITE("nodesetexporter::open62541")
 
                 SUBCASE("NodeID(ns=2;i=29), attr = UA_ATTRIBUTEID_CONTAINSNOLOOPS - NO VIEW")
                 {
-                    // todo At the time of development, I did not find Viewe to check. I check for missing data.
+                    // todo В момент разработки не нашел Viewe для проверки. Проверяю на отсутствие данных
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=29"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_CONTAINSNOLOOPS, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_CONTAINSNOLOOPS, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     CHECK_FALSE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_CONTAINSNOLOOPS).has_value());
                 }
 
@@ -810,23 +874,104 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(static_cast<UA_Byte>(UA_EVENTNOTIFIERTYPE_NONE));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_EVENTNOTIFIER, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_EVENTNOTIFIER, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EVENTNOTIFIER).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EVENTNOTIFIER).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_EVENTNOTIFIER, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EVENTNOTIFIER));
                 }
 
-                SUBCASE("NodeID(ns=2;i=2), attr = UA_ATTRIBUTEID_VALUE")
+                SUBCASE("attr = UA_ATTRIBUTEID_VALUE")
                 {
-                    auto test_loca_data = std::optional<VariantsOfAttr>(node_i_2_value);
+                    // todo Добавить все типы поддерживаемых узлов на тестовый сервер и добавить сами тесты
+                    SUBCASE("NodeID(ns=2;i=2) Double")
+                    {
+                        constexpr UA_Double test = 45.52951; // NOLINT
+                        auto test_loca_data = std::optional<VariantsOfAttr>(VariantsOfAttr(test));
+                        auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
+                        node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_VALUE, std::nullopt}}}));
+                        CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
+                        REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).has_value());
+                        MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).value()));
+                        CheckAttrValueEqual(UA_ATTRIBUTEID_VALUE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE));
+                    }
 
-                    auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_VALUE, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
-                    REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).has_value());
-                    MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).value()));
-                    CheckAttrValueEqual(UA_ATTRIBUTEID_VALUE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE));
+                    SUBCASE("NodeID(ns=2;i=4) String")
+                    {
+                        char* test = "speed"; // NOLINT
+                        auto test_loca_data = std::optional<VariantsOfAttr>(VariantsOfAttr(UATypesContainer<UA_String>(UA_STRING(test), UA_TYPES_STRING)));
+                        auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=4"), UA_TYPES_EXPANDEDNODEID);
+                        node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_VALUE, std::nullopt}}}));
+                        CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
+                        REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).has_value());
+                        MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).value()));
+                        CheckAttrValueEqual(UA_ATTRIBUTEID_VALUE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE));
+                    }
+
+                    SUBCASE("NodeID(ns=2;i=6) Int64")
+                    {
+                        constexpr UA_Int64 test = 311;
+                        auto test_loca_data = std::optional<VariantsOfAttr>(VariantsOfAttr(test));
+                        auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=6"), UA_TYPES_EXPANDEDNODEID);
+                        node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_VALUE, std::nullopt}}}));
+                        CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
+                        REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).has_value());
+                        MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).value()));
+                        CheckAttrValueEqual(UA_ATTRIBUTEID_VALUE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE));
+                    }
+
+                    SUBCASE("NodeID(ns=3;i=101) Boolean")
+                    {
+                        constexpr UA_Boolean test = true;
+                        auto test_loca_data = std::optional<VariantsOfAttr>(VariantsOfAttr(test));
+                        auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=3;i=101"), UA_TYPES_EXPANDEDNODEID);
+                        node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_VALUE, std::nullopt}}}));
+                        CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
+                        REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).has_value());
+                        MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).value()));
+                        CheckAttrValueEqual(UA_ATTRIBUTEID_VALUE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE));
+                    }
+
+                    SUBCASE("NodeID(ns=2;i=35) String Array")
+                    {
+                        std::vector<UATypesContainer<UA_String>> array;
+                        array.emplace_back(UA_STRING("21433"), UA_TYPES_STRING);
+                        array.emplace_back(UA_STRING("test 1"), UA_TYPES_STRING);
+                        array.emplace_back(UA_STRING("test 2"), UA_TYPES_STRING);
+                        array.emplace_back(UA_STRING("Тест русской локали 3"), UA_TYPES_STRING);
+                        MultidimensionalArray<UATypesContainer<UA_String>> test{std::move(array)};
+                        auto test_loca_data = std::optional<VariantsOfAttr>(VariantsOfAttr(test));
+                        auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=35"), UA_TYPES_EXPANDEDNODEID);
+                        node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_VALUE, std::nullopt}}}));
+                        CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
+                        REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).has_value());
+                        MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).value()));
+                        CheckAttrValueEqual(UA_ATTRIBUTEID_VALUE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE));
+                    }
+
+                    SUBCASE("NodeID(ns=2;i=33) DateTime")
+                    {
+                        UATypesContainer<UA_DateTime> test(UA_DateTime_fromStruct({0, 0, 0, 55, 12, 16, 13, 11, 2024}), UA_TYPES_DATETIME);
+                        auto test_loca_data = std::optional<VariantsOfAttr>(VariantsOfAttr(test));
+                        auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=33"), UA_TYPES_EXPANDEDNODEID);
+                        node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_VALUE, std::nullopt}}}));
+                        CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
+                        REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).has_value());
+                        MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).value()));
+                        CheckAttrValueEqual(UA_ATTRIBUTEID_VALUE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE));
+                    }
+
+                    SUBCASE("NodeID(ns=2;i=34) UInt32 Array")
+                    {
+                        MultidimensionalArray<UA_UInt32> test{{21433, 121433, 8423}};
+                        auto test_loca_data = std::optional<VariantsOfAttr>(VariantsOfAttr(test));
+                        auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=34"), UA_TYPES_EXPANDEDNODEID);
+                        node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_VALUE, std::nullopt}}}));
+                        CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
+                        REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).has_value());
+                        MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE).value()));
+                        CheckAttrValueEqual(UA_ATTRIBUTEID_VALUE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUE));
+                    }
                 }
 
                 SUBCASE("NodeID(ns=2;i=2), attr = UA_ATTRIBUTEID_DATATYPE")
@@ -835,8 +980,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(UATypesContainer<UA_NodeId>(UA_NODEID("i=11"), UA_TYPES_NODEID));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_DATATYPE, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_DATATYPE, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DATATYPE).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DATATYPE).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_DATATYPE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DATATYPE));
@@ -848,8 +993,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(static_cast<UA_Int32>(UA_VALUERANK_ONE_OR_MORE_DIMENSIONS));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=13"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_VALUERANK, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_VALUERANK, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUERANK).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUERANK).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_VALUERANK, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_VALUERANK));
@@ -858,11 +1003,11 @@ TEST_SUITE("nodesetexporter::open62541")
                 SUBCASE("NodeID(ns=2;i=22), attr = UA_ATTRIBUTEID_ARRAYDIMENSIONS")
                 {
 
-                    auto test_loca_data = std::optional<VariantsOfAttr>(std::vector<UA_UInt32>{3});
+                    auto test_loca_data = std::optional<VariantsOfAttr>(MultidimensionalArray<UA_UInt32>{{3}});
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=22"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_ARRAYDIMENSIONS, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_ARRAYDIMENSIONS, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ARRAYDIMENSIONS).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ARRAYDIMENSIONS).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_ARRAYDIMENSIONS, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ARRAYDIMENSIONS));
@@ -873,8 +1018,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(static_cast<UA_Byte>(UA_ACCESSLEVELMASK_READ));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=3"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_ACCESSLEVEL, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_ACCESSLEVEL, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ACCESSLEVEL).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ACCESSLEVEL).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_ACCESSLEVEL, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_ACCESSLEVEL));
@@ -885,8 +1030,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(static_cast<UA_Byte>(UA_ACCESSLEVELMASK_READ));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=3"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_USERACCESSLEVEL, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_USERACCESSLEVEL, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USERACCESSLEVEL).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USERACCESSLEVEL).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_USERACCESSLEVEL, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USERACCESSLEVEL));
@@ -897,8 +1042,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(static_cast<UA_Double>(1000));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=20"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL));
@@ -909,8 +1054,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(static_cast<UA_Boolean>(false));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=2"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_HISTORIZING, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_HISTORIZING, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_HISTORIZING).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_HISTORIZING).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_HISTORIZING, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_HISTORIZING));
@@ -921,8 +1066,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(static_cast<UA_Boolean>(true));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=12"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_EXECUTABLE, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_EXECUTABLE, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EXECUTABLE).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EXECUTABLE).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_EXECUTABLE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EXECUTABLE));
@@ -933,8 +1078,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(static_cast<UA_Boolean>(true));
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=12"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_USEREXECUTABLE, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_USEREXECUTABLE, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USEREXECUTABLE).has_value());
                     MESSAGE(VariantsOfAttrToString(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USEREXECUTABLE).value()));
                     CheckAttrValueEqual(UA_ATTRIBUTEID_USEREXECUTABLE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_USEREXECUTABLE));
@@ -947,8 +1092,8 @@ TEST_SUITE("nodesetexporter::open62541")
                     // // I tried to use my node with the data attribute, but for some reason the Python structure generator does not create C code to create this structure on the Server.
                     // Moreover, somehow it is in standard types, which seem to be generated by the same generator. (?)
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("i=376"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_DATATYPEDEFINITION, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_DATATYPEDEFINITION, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     REQUIRE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DATATYPEDEFINITION).has_value());
                     VariantsOfAttr value;
                     CHECK_NOTHROW(value = node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_DATATYPEDEFINITION).value()); // I take it out of std::options
@@ -964,21 +1109,29 @@ TEST_SUITE("nodesetexporter::open62541")
                     auto test_loca_data = std::optional<VariantsOfAttr>(std::nullopt);
 
                     auto node_id = UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID("ns=2;i=1"), UA_TYPES_EXPANDEDNODEID);
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_id, {{UA_ATTRIBUTEID_EXECUTABLE, std::nullopt}}}));
-                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_id, .attrs = {{UA_ATTRIBUTEID_EXECUTABLE, std::nullopt}}}));
+                    CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
                     CHECK_FALSE(node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EXECUTABLE).has_value());
                     CheckAttrValueEqual(UA_ATTRIBUTEID_EXECUTABLE, test_loca_data, node_attr_structure_lists.at(0).attrs.at(UA_ATTRIBUTEID_EXECUTABLE));
                 }
             }
 
 
-            SUBCASE("Reading Multiple Attributes of a Single Node")
+            SUBCASE("Чтение множества атрибутов одного узла")
             {
                 // Preparing the Query Array
                 auto test_loca_data = test_nodes_attributes_data.at(UA_NODECLASS_VARIABLE);
-                node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({test_loca_data.node_id, test_loca_data.attrs_results}));
+                node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = test_loca_data.node_id, .attrs = test_loca_data.attrs_results}));
+                auto attr_sum = std::accumulate( // NOLINT(boost-use-ranges)
+                    node_attr_structure_lists.begin(),
+                    node_attr_structure_lists.end(),
+                    0,
+                    [](size_t init, NodeAttributesRequestResponse& node_attr)
+                    {
+                        return init + node_attr.attrs.size();
+                    });
                 // Query
-                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, attr_sum).GetStatus(), StatusResults::Good);
                 // Reconciliation of results
                 for (const auto& test_attr : test_loca_data.attrs_results)
                 {
@@ -1002,11 +1155,11 @@ TEST_SUITE("nodesetexporter::open62541")
                 // Preparing the Query Array
                 for (const auto& node_test : test_nodes_attributes_data)
                 {
-                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({node_test.second.node_id, {{UA_ATTRIBUTEID_BROWSENAME, std::nullopt}}}));
+                    node_attr_structure_lists.emplace_back(NodeAttributesRequestResponse({.exp_node_id = node_test.second.node_id, .attrs = {{UA_ATTRIBUTEID_BROWSENAME, std::nullopt}}}));
                 }
                 // Query
-                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
-                // Reconciliation of results
+                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, node_attr_structure_lists.size()).GetStatus(), StatusResults::Good);
+                // For UA_ATTRIBUTEID_VALUE tests
                 size_t index = 0;
                 for (const auto& node_test : test_nodes_attributes_data)
                 {
@@ -1031,16 +1184,25 @@ TEST_SUITE("nodesetexporter::open62541")
                 // Preparing the Query Array
                 for (const auto& node_test : test_nodes_attributes_data)
                 {
-                    auto narr = NodeAttributesRequestResponse({node_test.second.node_id, {}});
+                    auto narr = NodeAttributesRequestResponse({.exp_node_id = node_test.second.node_id, .attrs = {}});
                     for (const auto& test_attr : node_test.second.attrs_results)
                     {
                         narr.attrs[test_attr.first] = std::nullopt;
                     }
                     node_attr_structure_lists.push_back(narr);
                 }
-                // Query
-                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
-                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists).GetStatus(), StatusResults::Good);
+
+                auto attr_sum = std::accumulate( // NOLINT(boost-use-ranges)
+                    node_attr_structure_lists.begin(),
+                    node_attr_structure_lists.end(),
+                    0,
+                    [](size_t init, NodeAttributesRequestResponse& node_attr)
+                    {
+                        return init + node_attr.attrs.size();
+                    });
+                // Запрос
+                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, attr_sum).GetStatus(), StatusResults::Good);
+                CHECK_EQ(client_wrapper.ReadNodesAttributes(node_attr_structure_lists, attr_sum).GetStatus(), StatusResults::Good);
                 // Reconciliation of results
                 size_t index = 0;
                 for (const auto& node_test : test_nodes_attributes_data)
@@ -1072,6 +1234,105 @@ TEST_SUITE("nodesetexporter::open62541")
         {
             server_thread.join();
         }
-        sleep(1);
+        sleep(1); // NOLINT(clang-analyzer-unix.BlockInCriticalSection)
+    }
+
+    /**
+     * nodeToBrowse - list of NodeIDs that need to be passed to the OPC UA server
+     * max_nodes_per_browse - the maximum number of NodeIDs that the OPC UA server can accept during a Browsing request
+     * max_browse_continuation_points - the maximum number of points that the OPC UA server can return after the Browsing operation.
+     * These points must be used for further reading through the BrowseNext operation. Each dot is a response to one NodeID request
+     * from the Browsing operation. For example: we sent a request from 10 NodeIDs to Browsing, received a partial response based on the sent NodeIDs,
+     * if max_browse_continuation_points = 10, then these points are used further for BrowseNext and further reading.
+     * requested_max_references_per_node - The client reports how many maximum child NodeIDs it is willing to receive in each requested
+     * parent NodeID. For example: requested_max_references_per_node = 10, the client requests references with 50 NodeID, sending
+     * given the number of nodes in the Browse operation, the server responds with 50 messages in each of which no more than requested_max_references_per_node
+     * links in the form of child NodeIDs. If the server did not have time to send all child links, you must do BrowsingNext.
+     * If the client imposes a restriction through requested_max_references_per_node, then in this operation
+     * you must pay attention to the server limitation max_browse_continuation_points and send the request as a NodeID in a number less than or equal to
+     * the max_browse_continuation_points value.
+     */
+    TEST_CASE("nodesetexporter::open62541::Open62541ClientWrapper::CalculateBrowseLimit") // NOLINT
+    {
+        std::vector<size_t> some_data;
+        constexpr auto index_size = 15;
+        some_data.reserve(index_size);
+        for (size_t i = 0; i < index_size; i++)
+        {
+            some_data.push_back(i);
+        }
+
+        SUBCASE("nodeToBrowse = 15, max_nodes_per_browse = 0, max_browse_continuation_points = 0, requested_max_references_per_node = 0")
+        {
+            constexpr auto max_nodes_per_browse = 0;
+            constexpr auto max_browse_continuation_points = 0;
+            constexpr auto requested_max_references_per_node = 0;
+            auto result = Open62541ClientWrapper::CalculateBrowseLimit(some_data.size(), max_nodes_per_browse, max_browse_continuation_points, requested_max_references_per_node);
+            CHECK_EQ(result, some_data.size());
+        }
+        SUBCASE("nodeToBrowse = 15, max_nodes_per_browse = 10, max_browse_continuation_points = 0, requested_max_references_per_node = 0")
+        {
+            constexpr auto max_nodes_per_browse = 10;
+            constexpr auto max_browse_continuation_points = 0;
+            constexpr auto requested_max_references_per_node = 0;
+            auto result = Open62541ClientWrapper::CalculateBrowseLimit(some_data.size(), max_nodes_per_browse, max_browse_continuation_points, requested_max_references_per_node);
+            CHECK_EQ(result, max_nodes_per_browse);
+        }
+        SUBCASE("nodeToBrowse = 15, max_nodes_per_browse = 0, max_browse_continuation_points = 10, requested_max_references_per_node = 0")
+        {
+            constexpr auto max_nodes_per_browse = 0;
+            constexpr auto max_browse_continuation_points = 10;
+            constexpr auto requested_max_references_per_node = 0;
+            auto result = Open62541ClientWrapper::CalculateBrowseLimit(some_data.size(), max_nodes_per_browse, max_browse_continuation_points, requested_max_references_per_node);
+            CHECK_EQ(result, some_data.size());
+        }
+        SUBCASE("nodeToBrowse = 15, max_nodes_per_browse = 0, max_browse_continuation_points = 10, requested_max_references_per_node = 5")
+        {
+            constexpr auto max_nodes_per_browse = 0;
+            constexpr auto max_browse_continuation_points = 10;
+            constexpr auto requested_max_references_per_node = 5;
+            auto result = Open62541ClientWrapper::CalculateBrowseLimit(some_data.size(), max_nodes_per_browse, max_browse_continuation_points, requested_max_references_per_node);
+            CHECK_EQ(result, max_browse_continuation_points);
+        }
+        SUBCASE("nodeToBrowse = 15, max_nodes_per_browse = 100, max_browse_continuation_points = 10, requested_max_references_per_node = 5")
+        {
+            constexpr auto max_nodes_per_browse = 100;
+            constexpr auto max_browse_continuation_points = 10;
+            constexpr auto requested_max_references_per_node = 5;
+            auto result = Open62541ClientWrapper::CalculateBrowseLimit(some_data.size(), max_nodes_per_browse, max_browse_continuation_points, requested_max_references_per_node);
+            CHECK_EQ(result, max_browse_continuation_points);
+        }
+        SUBCASE("nodeToBrowse = 15, max_nodes_per_browse = 5, max_browse_continuation_points = 10, requested_max_references_per_node = 5")
+        {
+            constexpr auto max_nodes_per_browse = 5;
+            constexpr auto max_browse_continuation_points = 10;
+            constexpr auto requested_max_references_per_node = 5;
+            auto result = Open62541ClientWrapper::CalculateBrowseLimit(some_data.size(), max_nodes_per_browse, max_browse_continuation_points, requested_max_references_per_node);
+            CHECK_EQ(result, max_nodes_per_browse);
+        }
+        SUBCASE("nodeToBrowse = 15, max_nodes_per_browse = 150, max_browse_continuation_points = 100, requested_max_references_per_node = 5")
+        {
+            constexpr auto max_nodes_per_browse = 150;
+            constexpr auto max_browse_continuation_points = 100;
+            constexpr auto requested_max_references_per_node = 5;
+            auto result = Open62541ClientWrapper::CalculateBrowseLimit(some_data.size(), max_nodes_per_browse, max_browse_continuation_points, requested_max_references_per_node);
+            CHECK_EQ(result, some_data.size());
+        }
+        SUBCASE("nodeToBrowse = 15, max_nodes_per_browse = 150, max_browse_continuation_points = 100, requested_max_references_per_node = 0")
+        {
+            constexpr auto max_nodes_per_browse = 150;
+            constexpr auto max_browse_continuation_points = 100;
+            constexpr auto requested_max_references_per_node = 0;
+            auto result = Open62541ClientWrapper::CalculateBrowseLimit(some_data.size(), max_nodes_per_browse, max_browse_continuation_points, requested_max_references_per_node);
+            CHECK_EQ(result, some_data.size());
+        }
+        SUBCASE("nodeToBrowse = 15, max_nodes_per_browse = 0, max_browse_continuation_points = 100, requested_max_references_per_node = 0")
+        {
+            constexpr auto max_nodes_per_browse = 0;
+            constexpr auto max_browse_continuation_points = 100;
+            constexpr auto requested_max_references_per_node = 0;
+            auto result = Open62541ClientWrapper::CalculateBrowseLimit(some_data.size(), max_nodes_per_browse, max_browse_continuation_points, requested_max_references_per_node);
+            CHECK_EQ(result, some_data.size());
+        }
     }
 }

@@ -32,7 +32,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
         SUBCASE("Testing a Constructor with a Container Type Parameter")
         {
-            UATypesContainer<UA_NodeId> c_ua_nodeid(UA_TYPES_NODEID);
+            UATypesContainer<UA_NodeId> const c_ua_nodeid(UA_TYPES_NODEID);
 
             CHECK_EQ(c_ua_nodeid.GetType(), UA_TYPES_NODEID);
         }
@@ -146,7 +146,7 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("SetParamFromString от UA_NodeID (str move)")
             {
                 UATypesContainer<UA_NodeId> node_id(UA_TYPES_NODEID);
-                node_id.SetParamFromString(node_id_string);
+                node_id.SetParamFromString(std::string(node_id_string));
                 CHECK_EQ(node_id.GetType(), UA_TYPES_NODEID);
                 CHECK_EQ(node_id.ToString(), node_id_string);
                 CHECK(UA_NodeId_equal(&ua_node_id_1, &node_id.GetRef()));
@@ -156,7 +156,7 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("SetParamFromString от UA_NodeID (str ref)")
             {
                 UATypesContainer<UA_NodeId> node_id(UA_TYPES_NODEID);
-                std::string str_node_id(node_id_string);
+                std::string const str_node_id(node_id_string);
                 node_id.SetParamFromString(str_node_id);
                 CHECK_EQ(node_id.GetType(), UA_TYPES_NODEID);
                 CHECK_EQ(node_id.ToString(), node_id_string);
@@ -167,7 +167,7 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("SetParamFromString from UA_ExpandedNodeID (str move)")
             {
                 UATypesContainer<UA_ExpandedNodeId> exp_node_id(UA_TYPES_EXPANDEDNODEID);
-                exp_node_id.SetParamFromString(exp_node_id_string);
+                exp_node_id.SetParamFromString(std::string(exp_node_id_string));
                 CHECK_EQ(exp_node_id.GetType(), UA_TYPES_EXPANDEDNODEID);
                 CHECK_EQ(exp_node_id.ToString(), exp_node_id_string);
                 CHECK(UA_ExpandedNodeId_equal(&ua_exp_node_id_1, &exp_node_id.GetRef()));
@@ -177,7 +177,7 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("SetParamFromString from UA_ExpandedNodeID (str ref)")
             {
                 UATypesContainer<UA_ExpandedNodeId> exp_node_id(UA_TYPES_EXPANDEDNODEID);
-                std::string str_node_id(exp_node_id_string);
+                std::string const str_node_id(exp_node_id_string);
                 exp_node_id.SetParamFromString(str_node_id);
                 CHECK_EQ(exp_node_id.GetType(), UA_TYPES_EXPANDEDNODEID);
                 CHECK_EQ(exp_node_id.ToString(), exp_node_id_string);
@@ -196,7 +196,7 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("SetParamFromString from UA_NodeID (str move)")
             {
                 UATypesContainer<UA_NodeId> node_id(UA_TYPES_NODEID);
-                node_id.SetParamFromString(node_id_string);
+                node_id.SetParamFromString(std::string(node_id_string));
                 CHECK_EQ(node_id.GetType(), UA_TYPES_NODEID);
                 CHECK_EQ(node_id.ToString(), node_id_string);
                 CHECK(UA_NodeId_equal(&ua_node_id_1, &node_id.GetRef()));
@@ -206,7 +206,7 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("SetParamFromString from UA_NodeID (str ref)")
             {
                 UATypesContainer<UA_NodeId> node_id(UA_TYPES_NODEID);
-                std::string str_node_id(node_id_string);
+                std::string const str_node_id(node_id_string);
                 node_id.SetParamFromString(str_node_id);
                 CHECK_EQ(node_id.GetType(), UA_TYPES_NODEID);
                 CHECK_EQ(node_id.ToString(), node_id_string);
@@ -217,7 +217,7 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("SetParamFromString from UA_ExpandedNodeID (str move)")
             {
                 UATypesContainer<UA_ExpandedNodeId> exp_node_id(UA_TYPES_EXPANDEDNODEID);
-                exp_node_id.SetParamFromString(exp_node_id_string);
+                exp_node_id.SetParamFromString(std::string(exp_node_id_string));
                 CHECK_EQ(exp_node_id.GetType(), UA_TYPES_EXPANDEDNODEID);
                 CHECK_EQ(exp_node_id.ToString(), exp_node_id_string);
                 CHECK(UA_ExpandedNodeId_equal(&ua_exp_node_id_1, &exp_node_id.GetRef()));
@@ -227,7 +227,7 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("SetParamFromString from UA_ExpandedNodeID (str ref)")
             {
                 UATypesContainer<UA_ExpandedNodeId> exp_node_id(UA_TYPES_EXPANDEDNODEID);
-                std::string str_node_id(exp_node_id_string);
+                std::string const str_node_id(exp_node_id_string);
                 exp_node_id.SetParamFromString(str_node_id);
                 CHECK_EQ(exp_node_id.GetType(), UA_TYPES_EXPANDEDNODEID);
                 CHECK_EQ(exp_node_id.ToString(), exp_node_id_string);
@@ -239,7 +239,7 @@ TEST_SUITE("nodesetexporter::open62541")
         UA_ExpandedNodeId_clear(&ua_exp_node_id_1);
     }
 
-    TEST_CASE("idsmart::connector::nodesetexporter::open62541::UATypesContainer UA_TYPES_UINT64") // NOLINT
+    TEST_CASE("nodesetexporter::open62541::UATypesContainer UA_TYPES_UINT64") // NOLINT
     {
         SUBCASE("Testing a Constructor with a Container Type Parameter")
         {
@@ -326,8 +326,8 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("Checking the assembly premises in the SET container, where the key is the UATypesContainer<UA_Nodeid>")
             {
                 UATypesContainer<UA_NodeId> c_ua_nodeid1(ua_node_id_1, UA_TYPES_NODEID);
-                UATypesContainer<UA_NodeId> c_ua_nodeid1_sec(ua_node_id_1, UA_TYPES_NODEID);
-                UATypesContainer<UA_NodeId> c_ua_nodeid2(ua_node_id_2, UA_TYPES_NODEID);
+                UATypesContainer<UA_NodeId> const c_ua_nodeid1_sec(ua_node_id_1, UA_TYPES_NODEID);
+                UATypesContainer<UA_NodeId> const c_ua_nodeid2(ua_node_id_2, UA_TYPES_NODEID);
 
                 std::set<UATypesContainer<UA_NodeId>> container{c_ua_nodeid1, c_ua_nodeid1_sec, c_ua_nodeid2};
                 CHECK_EQ(container.size(), 2);
@@ -348,8 +348,8 @@ TEST_SUITE("nodesetexporter::open62541")
                 ua_exp_nodeid1_sec.namespaceUri = UA_STRING("urn:some:test");
                 auto ua_exp_nodeid2 = UA_EXPANDEDNODEID_NODEID(ua_node_id_2);
 
-                UATypesContainer<UA_ExpandedNodeId> c_ua_exp_nodeid1(ua_exp_nodeid1, UA_TYPES_EXPANDEDNODEID);
-                UATypesContainer<UA_ExpandedNodeId> c_ua_exp_nodeid1_sec(ua_exp_nodeid1_sec, UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> const c_ua_exp_nodeid1(ua_exp_nodeid1, UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> const c_ua_exp_nodeid1_sec(ua_exp_nodeid1_sec, UA_TYPES_EXPANDEDNODEID);
                 UATypesContainer<UA_ExpandedNodeId> c_ua_exp_nodeid2(ua_exp_nodeid2, UA_TYPES_EXPANDEDNODEID);
 
                 std::set<UATypesContainer<UA_ExpandedNodeId>> container{c_ua_exp_nodeid1, c_ua_exp_nodeid1_sec, c_ua_exp_nodeid2};
@@ -369,8 +369,8 @@ TEST_SUITE("nodesetexporter::open62541")
             SUBCASE("Checking the assembly premises in the SET container, where the key is the UATypesContainer<UA_Nodeid>")
             {
                 UATypesContainer<UA_NodeId> c_ua_nodeid1(&ua_node_id_1, UA_TYPES_NODEID);
-                UATypesContainer<UA_NodeId> c_ua_nodeid1_sec(&ua_node_id_1, UA_TYPES_NODEID);
-                UATypesContainer<UA_NodeId> c_ua_nodeid2(&ua_node_id_2, UA_TYPES_NODEID);
+                UATypesContainer<UA_NodeId> const c_ua_nodeid1_sec(&ua_node_id_1, UA_TYPES_NODEID);
+                UATypesContainer<UA_NodeId> const c_ua_nodeid2(&ua_node_id_2, UA_TYPES_NODEID);
 
                 std::set<UATypesContainer<UA_NodeId>> container{c_ua_nodeid1, c_ua_nodeid1_sec, c_ua_nodeid2};
                 CHECK_EQ(container.size(), 2);
@@ -391,9 +391,9 @@ TEST_SUITE("nodesetexporter::open62541")
                 ua_exp_nodeid1_sec.namespaceUri = UA_STRING("urn:some:test");
                 auto ua_exp_nodeid2 = UA_EXPANDEDNODEID_NODEID(ua_node_id_2);
 
-                UATypesContainer<UA_ExpandedNodeId> c_ua_exp_nodeid1(&ua_exp_nodeid1, UA_TYPES_EXPANDEDNODEID);
-                UATypesContainer<UA_ExpandedNodeId> c_ua_exp_nodeid1_sec(&ua_exp_nodeid1_sec, UA_TYPES_EXPANDEDNODEID);
-                UATypesContainer<UA_ExpandedNodeId> c_ua_exp_nodeid2(&ua_exp_nodeid2, UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> const c_ua_exp_nodeid1(&ua_exp_nodeid1, UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> const c_ua_exp_nodeid1_sec(&ua_exp_nodeid1_sec, UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> const c_ua_exp_nodeid2(&ua_exp_nodeid2, UA_TYPES_EXPANDEDNODEID);
 
                 std::set<UATypesContainer<UA_ExpandedNodeId>> container{c_ua_exp_nodeid1, c_ua_exp_nodeid1_sec, c_ua_exp_nodeid2};
                 CHECK_EQ(container.size(), 2);
@@ -421,7 +421,7 @@ TEST_SUITE("nodesetexporter::open62541")
 
             SUBCASE("Checking hash with UATypesContainer<UA_NodeId>")
             {
-                UATypesContainer<UA_NodeId> c_ua_nodeid1(ua_node_id_1, UA_TYPES_NODEID);
+                UATypesContainer<UA_NodeId> const c_ua_nodeid1(ua_node_id_1, UA_TYPES_NODEID);
 
                 CHECK_NOTHROW(hash = std::hash<UATypesContainer<UA_NodeId>>{}(c_ua_nodeid1));
                 CHECK_NE(hash, 0);
@@ -433,7 +433,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 auto ua_exp_nodeid1 = UA_EXPANDEDNODEID_NODEID(ua_node_id_1);
                 ua_exp_nodeid1.serverIndex = 2;
                 ua_exp_nodeid1.namespaceUri = UA_STRING("urn:some:test");
-                UATypesContainer<UA_ExpandedNodeId> c_ua_exp_nodeid1(ua_exp_nodeid1, UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> const c_ua_exp_nodeid1(ua_exp_nodeid1, UA_TYPES_EXPANDEDNODEID);
 
                 CHECK_NOTHROW(hash = std::hash<UATypesContainer<UA_ExpandedNodeId>>{}(c_ua_exp_nodeid1));
                 CHECK_NE(hash, 0);
@@ -445,7 +445,7 @@ TEST_SUITE("nodesetexporter::open62541")
         {
             SUBCASE("Checking hash with UATypesContainer<UA_NodeId>")
             {
-                UATypesContainer<UA_NodeId> c_ua_nodeid1(&ua_node_id_1, UA_TYPES_NODEID);
+                UATypesContainer<UA_NodeId> const c_ua_nodeid1(&ua_node_id_1, UA_TYPES_NODEID);
                 CHECK_NOTHROW(hash = std::hash<UATypesContainer<UA_NodeId>>{}(c_ua_nodeid1));
                 CHECK_NE(hash, 0);
                 MESSAGE(hash);
@@ -456,7 +456,7 @@ TEST_SUITE("nodesetexporter::open62541")
                 auto ua_exp_nodeid1 = UA_EXPANDEDNODEID_NODEID(ua_node_id_1);
                 ua_exp_nodeid1.serverIndex = 2;
                 ua_exp_nodeid1.namespaceUri = UA_STRING("urn:some:test");
-                UATypesContainer<UA_ExpandedNodeId> c_ua_exp_nodeid1(&ua_exp_nodeid1, UA_TYPES_EXPANDEDNODEID);
+                UATypesContainer<UA_ExpandedNodeId> const c_ua_exp_nodeid1(&ua_exp_nodeid1, UA_TYPES_EXPANDEDNODEID);
                 CHECK_NOTHROW(hash = std::hash<UATypesContainer<UA_ExpandedNodeId>>{}(c_ua_exp_nodeid1));
                 CHECK_NE(hash, 0);
                 MESSAGE(hash);

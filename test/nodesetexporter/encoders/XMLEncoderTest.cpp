@@ -9,6 +9,7 @@
 #include "nodesetexporter/encoders/XMLEncoder.h"
 #include "LogMacro.h"
 #include "XmlHelperFunctions.h"
+#include "nodesetexporter/open62541/TypeAliases.h"
 
 #include <open62541/types.h>
 
@@ -25,6 +26,7 @@ using StatusResults = nodesetexporter::common::statuses::StatusResults<>;
 using NodeIntermediateModel = nodesetexporter::open62541::NodeIntermediateModel;
 using ::nodesetexporter::open62541::UATypesContainer;
 using ::nodesetexporter::open62541::VariantsOfAttr;
+using nodesetexporter::open62541::typealiases::MultidimensionalArray;
 using tinyxml2::XMLDocument;
 
 } // namespace
@@ -195,7 +197,7 @@ TEST_SUITE("nodesetexporter::encoders")
         xmlpp::Attribute::NodeSet xml_nodes;
 
 #pragma region Test data
-        std::map<std::string, UATypesContainer<UA_NodeId>> aliases(
+        const std::map<std::string, UATypesContainer<UA_NodeId>> aliases(
             {{"Int64", UATypesContainer<UA_NodeId>{UA_NODEID("i=8"), UA_TYPES_NODEID}},
              {"String", UATypesContainer<UA_NodeId>{UA_NODEID("i=12"), UA_TYPES_NODEID}},
              {"HasProperty", UATypesContainer<UA_NodeId>{UA_NODEID("i=46"), UA_TYPES_NODEID}},
@@ -254,7 +256,7 @@ TEST_SUITE("nodesetexporter::encoders")
         ref_desc_has_subtype.isForward = false;
 
         /* UA_NODECLASS_OBJECT */
-        std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_object{
+        const std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_object{
             {UA_ATTRIBUTEID_BROWSENAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(1, "vPLC1"), UA_TYPES_QUALIFIEDNAME)}},
             {UA_ATTRIBUTEID_DISPLAYNAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("en", "vPLC1"), UA_TYPES_LOCALIZEDTEXT)}},
             {UA_ATTRIBUTEID_DESCRIPTION, std::optional<VariantsOfAttr>{UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description vPLC1"), UA_TYPES_LOCALIZEDTEXT)}},
@@ -269,7 +271,7 @@ TEST_SUITE("nodesetexporter::encoders")
         nim_object.SetAttributes(attrs_object);
 
         /* UA_NODECLASS_OBJECTTYPE */
-        std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_object_type{
+        const std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_object_type{
             {UA_ATTRIBUTEID_BROWSENAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(1, "FolderType"), UA_TYPES_QUALIFIEDNAME)}},
             {UA_ATTRIBUTEID_DISPLAYNAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "FolderType"), UA_TYPES_LOCALIZEDTEXT)}},
             {UA_ATTRIBUTEID_WRITEMASK, std::optional<VariantsOfAttr>{static_cast<UA_UInt32>(UA_WRITEMASK_DISPLAYNAME | UA_WRITEMASK_DESCRIPTION)}},
@@ -283,7 +285,7 @@ TEST_SUITE("nodesetexporter::encoders")
         nim_object_type.SetAttributes(attrs_object_type);
 
         /* UA_NODECLASS_VARIABLE */
-        std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_variable_scalar{
+        const std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_variable_scalar{
             {UA_ATTRIBUTEID_BROWSENAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(1, "static_param1"), UA_TYPES_QUALIFIEDNAME)}},
             {UA_ATTRIBUTEID_DISPLAYNAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "static_param1"), UA_TYPES_LOCALIZEDTEXT)}},
             {UA_ATTRIBUTEID_DESCRIPTION, std::optional<VariantsOfAttr>{UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description static_param1"), UA_TYPES_LOCALIZEDTEXT)}},
@@ -305,7 +307,7 @@ TEST_SUITE("nodesetexporter::encoders")
         nim_variable_scalar.SetAttributes(attrs_variable_scalar);
 
         /* UA_NODECLASS_VARIABLE */
-        std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_variable_array{
+        const std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_variable_array{
             {UA_ATTRIBUTEID_BROWSENAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(1, "EnumValues"), UA_TYPES_QUALIFIEDNAME)}},
             {UA_ATTRIBUTEID_DISPLAYNAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "EnumValues"), UA_TYPES_LOCALIZEDTEXT)}},
             {UA_ATTRIBUTEID_DESCRIPTION, std::optional<VariantsOfAttr>{std::nullopt}},
@@ -313,7 +315,7 @@ TEST_SUITE("nodesetexporter::encoders")
             {UA_ATTRIBUTEID_USERWRITEMASK, std::optional<VariantsOfAttr>{static_cast<UA_UInt32>(0)}},
             {UA_ATTRIBUTEID_DATATYPE, std::optional<VariantsOfAttr>{UATypesContainer<UA_NodeId>(UA_NODEID("i=7594"), UA_TYPES_NODEID)}},
             {UA_ATTRIBUTEID_VALUERANK, std::optional<VariantsOfAttr>{static_cast<UA_Int32>(UA_VALUERANK_TWO_DIMENSIONS)}},
-            {UA_ATTRIBUTEID_ARRAYDIMENSIONS, std::optional<VariantsOfAttr>{std::vector<UA_UInt32>{5, 3}}},
+            {UA_ATTRIBUTEID_ARRAYDIMENSIONS, std::optional<VariantsOfAttr>{MultidimensionalArray<UA_UInt32>{{5, 3}}}},
             {UA_ATTRIBUTEID_VALUE, std::optional<VariantsOfAttr>{std::nullopt}},
             {UA_ATTRIBUTEID_ACCESSLEVEL, std::optional<VariantsOfAttr>{static_cast<UA_Byte>(1)}},
             {UA_ATTRIBUTEID_USERACCESSLEVEL, std::optional<VariantsOfAttr>{static_cast<UA_Byte>(1)}},
@@ -327,7 +329,7 @@ TEST_SUITE("nodesetexporter::encoders")
         nim_variable_array.SetAttributes(attrs_variable_array);
 
         /* UA_NODECLASS_VARIABLETYPE */
-        std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_variable_type{
+        const std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_variable_type{
             {UA_ATTRIBUTEID_BROWSENAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(0, "BaseVariableType"), UA_TYPES_QUALIFIEDNAME)}},
             {UA_ATTRIBUTEID_DESCRIPTION, std::optional<VariantsOfAttr>{UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description BaseVariableType"), UA_TYPES_LOCALIZEDTEXT)}},
             {UA_ATTRIBUTEID_DISPLAYNAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "BaseVariableType"), UA_TYPES_LOCALIZEDTEXT)}},
@@ -335,7 +337,7 @@ TEST_SUITE("nodesetexporter::encoders")
             {UA_ATTRIBUTEID_WRITEMASK, std::optional<VariantsOfAttr>{static_cast<UA_UInt32>(UA_WRITEMASK_DISPLAYNAME | UA_WRITEMASK_DESCRIPTION)}},
             {UA_ATTRIBUTEID_DATATYPE, std::optional<VariantsOfAttr>{UATypesContainer<UA_NodeId>(UA_NODEID("i=45"), UA_TYPES_NODEID)}},
             {UA_ATTRIBUTEID_ISABSTRACT, std::optional<VariantsOfAttr>{static_cast<UA_Boolean>(true)}},
-            {UA_ATTRIBUTEID_ARRAYDIMENSIONS, std::optional<VariantsOfAttr>{std::vector<UA_UInt32>{2}}},
+            {UA_ATTRIBUTEID_ARRAYDIMENSIONS, std::optional<VariantsOfAttr>{MultidimensionalArray<UA_UInt32>{{2}}}},
             {UA_ATTRIBUTEID_VALUERANK, std::optional<VariantsOfAttr>{static_cast<UA_Int32>(UA_VALUERANK_ONE_DIMENSION)}},
             {UA_ATTRIBUTEID_VALUE, std::optional<VariantsOfAttr>{std::nullopt}}};
         NodeIntermediateModel nim_variable_type;
@@ -346,7 +348,7 @@ TEST_SUITE("nodesetexporter::encoders")
         nim_variable_type.SetAttributes(attrs_variable_type);
 
         /* UA_NODECLASS_REFERENCETYPE */
-        std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_reference_type{
+        const std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_reference_type{
             {UA_ATTRIBUTEID_DESCRIPTION, std::optional<VariantsOfAttr>{UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description References"), UA_TYPES_LOCALIZEDTEXT)}},
             {UA_ATTRIBUTEID_BROWSENAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(0, "References"), UA_TYPES_QUALIFIEDNAME)}},
             {UA_ATTRIBUTEID_USERWRITEMASK, std::optional<VariantsOfAttr>{static_cast<UA_UInt32>(UA_WRITEMASK_DISPLAYNAME | UA_WRITEMASK_BROWSENAME)}},
@@ -362,7 +364,7 @@ TEST_SUITE("nodesetexporter::encoders")
         nim_reference_type.SetAttributes(attrs_reference_type);
 
         /* UA_NODECLASS_DATATYPE */
-        std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_data_type{
+        const std::map<UA_AttributeId, std::optional<VariantsOfAttr>> attrs_data_type{
             {UA_ATTRIBUTEID_BROWSENAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(0, "My Number"), UA_TYPES_QUALIFIEDNAME)}},
             {UA_ATTRIBUTEID_DESCRIPTION, std::optional<VariantsOfAttr>{UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "Description My Number"), UA_TYPES_LOCALIZEDTEXT)}},
             {UA_ATTRIBUTEID_DISPLAYNAME, std::optional<VariantsOfAttr>{UATypesContainer<UA_LocalizedText>(UA_LOCALIZEDTEXT("", "My Number"), UA_TYPES_LOCALIZEDTEXT)}},

@@ -33,6 +33,7 @@ using LoggerPlugin = nodesetexporter::logger::Open62541LogPlugin;
 using StatusResults = ::nodesetexporter::common::statuses::StatusResults<>;
 using nodesetexporter::open62541::UATypesContainer;
 using nodesetexporter::open62541::browseoperations::GrabChildNodeIdsFromStartNodeId;
+using LogLevel = nodesetexporter::common::LogLevel;
 using namespace std::literals;
 
 constexpr auto SERVER_START_TIMEOUT = 10s;
@@ -64,11 +65,11 @@ auto OpcUaServerStart()
 #ifdef OPEN62541_VER_1_3
             config.logger = LoggerPlugin::Open62541LoggerCreator(logger);
 #elif defined(OPEN62541_VER_1_4)
+            logger.SetLevel(LogLevel::Info);
             auto logging = LoggerPlugin::Open62541LoggerCreator(logger);
             config.logging = &logging;
 #endif
-            auto retval = UA_ServerConfig_setDefault(&config);
-            REQUIRE_EQ(retval, UA_STATUSCODE_GOOD);
+            CHECK_ERR(UA_ServerConfig_setDefault(&config));
             auto* server = UA_Server_newWithConfig(&config);
             REQUIRE_NE(server, nullptr);
             CHECK_ERR(ex_nodeset(server)); // TEST NODESET LOADER (HARDCODE)
@@ -77,7 +78,7 @@ auto OpcUaServerStart()
                 server,
                 [](UA_Server* /*server*/, void*)
                 {
-                    std::lock_guard<std::mutex> locker(cv_mutex);
+                    const std::lock_guard locker(cv_mutex);
                     cv_server_started.notify_all();
                 },
                 nullptr,
@@ -96,9 +97,9 @@ auto OpcUaServerStart()
 
 } // namespace
 
-TEST_SUITE("idsmart::connector::nodesetexporter::open62541")
+TEST_SUITE("nodesetexporter::open62541")
 {
-    TEST_CASE("idsmart::connector::nodesetexporter::open62541::browseoperations") // NOLINT
+    TEST_CASE("nodesetexporter::open62541::browseoperations") // NOLINT
     {
         std::unique_lock<std::mutex> locker(cv_mutex);
         running = true;
@@ -127,7 +128,7 @@ TEST_SUITE("idsmart::connector::nodesetexporter::open62541")
                 std::vector<UATypesContainer<UA_ExpandedNodeId>> out;
                 CHECK_EQ(GrabChildNodeIdsFromStartNodeId(client, startNodeId, out).GetStatus(), StatusResults::Good);
                 CHECK_NE(out.size(), 0);
-                CHECK_EQ(out.size(), 43);
+                CHECK_EQ(out.size(), 46);
 
                 MESSAGE("Node Id's:");
                 for (const auto& node_id : out)
@@ -156,6 +157,6 @@ TEST_SUITE("idsmart::connector::nodesetexporter::open62541")
                 server_thread.join();
             }
         }
-        sleep(1);
+        sleep(1); // NOLINT
     }
 }

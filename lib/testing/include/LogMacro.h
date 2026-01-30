@@ -17,7 +17,7 @@
 using LogerBase = nodesetexporter::common::LoggerBase<std::string>;
 using DateTime = nodesetexporter::common::DateTime;
 
-#define PREPARE_MESSAGE(message) (GetLoggerName() + "[" + DateTime::GetDateTimeToString(*DateTime::DateTimeLocalNow(), "%Y/%m/%d %H:%M:%S") + "]: " + (message)) // NOLINT
+#define PREPARE_MESSAGE(message) (GetLoggerName() + "[" + DateTime::GetDateTimeToString(*DateTime::DateTimeLocalNow(), "%Y/%m/%d %H:%M:%S") + "]: " + (std::move(message))) // NOLINT
 
 // Определяю класс в виде макроса, чтобы явно показывать в модуле назначение присутствие логирования.
 #define TEST_LOGGER_INIT                                                                                                                                                                               \
