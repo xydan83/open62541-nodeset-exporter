@@ -5,7 +5,7 @@
 #  License, v. 2.0. If a copy of the MPL was not distributed with this
 #  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-#  Copyright 2024 (c) Aleksander Rozhkov <aleksprog@hotmail.com>
+#  Copyright 2026 (c) Aleksander Rozhkov <aleksprog@hotmail.com>
 #
 
 # fail on errors
@@ -17,8 +17,8 @@ if test $(id -u) != 0; then
   SUDO=sudo
 fi
 
-export CLANG_VERSION="${CLANG_VERSION:-14}"
-export GCC_VERSION="${GCC_VERSION:-12}"
+export CLANG_VERSION="${CLANG_VERSION:-19}"
+export GCC_VERSION="${GCC_VERSION:-14}"
 
 echo -e "\e[31mInstalling build dependencies for Linux Ubuntu...\e[0m"
 
@@ -71,7 +71,7 @@ function install_build_dependencies_ubuntu() {
     python3-pip
 
   echo "Installing Conan package manager..."
-  pip3 install --no-cache-dir "conan>=1.0,<2.0"
+  pip3 install --no-cache-dir "conan>=1.66,<2.0"
 
   echo "WARNING: It is recommended to re-login / reboot for new tools to become available on \$PATH."
 }
@@ -100,7 +100,7 @@ if [[ "${OSTYPE}" == "linux-gnu" ]]; then
   case ${ID} in
   ubuntu)
     case "${VERSION}" in
-    *Focal* | *Jammy*)
+    *Noble*)
       install_build_dependencies_ubuntu
       ;;
     *)
