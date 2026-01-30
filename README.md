@@ -36,18 +36,22 @@ Already done:
 ✅ Export Aliases, Namespaces, UAObjects, UAObjectTypes, UAVariables, UAVariableTypes, UAReferenceTypes (only
 HierarhicalReference), UADataTypes (without definition). Nodes with references. \
 ✅ Cli utility for exporting \
-✅ Added experimental optional modes: ns0_custom_nodes_ready_to_work, flat_list_of_nodes,
-flat_list_of_nodes__create_missing_start_node, flat_list_of_nodes__allow_abstract_variable
+✅ Added experimental optional modes: ns0_custom_nodes_ready_to_work, flat_list_of_nodes, 
+flat_list_of_nodes__create_missing_start_node, flat_list_of_nodes__allow_abstract_variable \  
+✅ Added data values for XML. You can export node data values to XML. There are restrictions on the types of values 
+that can be exported. All simple types are supported, as well as UA_NodeClass, StatusCode, UA_DateTime, UA_Guid, 
+UA_String (ByteString), UA_NodeId, UA_ExpandedNodeId, UA_QualifiedName, UA_LocalizedText, and UA_DiagnosticInfo.  
+MultidimensionalArrays of all specified types are also supported.  
 
 Planned:
 
 ⭕ Using the Open62541 Server to collect information for export \
 ⭕ Support Definition (DataTypeDefinition) in UADataTypes \
 ⭕ Collect and export all custom data types \
-⭕ Support for exporting Values in Variable and VariableType class nodes \
 ⭕ Exporting UAView \
 ⭕ Windows build support \
-⭕ More unit tests
+⭕ More unit tests \
+⭕ Upgrade to Conan 2
 
 ❌ UAMethods is not exported because we can't move the code \
 ❌ Nodes and types ns=0 are not exported (except custom nodes in ns=0 (**optional**))
@@ -60,30 +64,32 @@ To build you will need installed in your system:
 
 - python3
 - pip
-- conan
+- conan 1
 - git
 - make
 - cmake
 - GCC (C++20 features are available since GCC 8, but development was carried out on GCC 12).
   https://gcc.gnu.org/projects/cxx-status.html
-- pre-compiled and pre-installed open62541 version 1.3.x or 1.4.x
+- pre-compiled and pre-installed open62541 version 1.3.x or 1.4.x (UA_ENABLE_JSON_ENCODING=ON needed)
 
 Conan dependencies:
 
-- boost/1.79.0
-- tinyxml2/9.0.0
-- fmt/8.1.1
-- libxmlpp/5.0.1 (only for tests)
+- boost/1.84.0
+- tinyxml2/10.0.0
+- fmt/10.2.1
+- magic_enum/0.9.6
+- libxmlpp/5.2.0 (only for tests)
 - doctest/2.4.11 (only for tests)
 - trompeloeil/47 (only for tests)
 
-To build the environment, you can use the **install-build-deps.sh** script if you are working on Ubuntu 20 (Focal Fossa)
-or 22 (Jammy Jellyfish) version or add your version to the following part of the code:
+To build the environment, you can use the **install-build-deps.sh** script if you are working on Ubuntu 24 LTS (Noble)
+version or add your version to the following part of the code, for example:
 
 ```bash
     case "${VERSION}" in
     *Focal* | *Jammy*) # <-- Here
 ```
+But if you add support for previous OS versions, you will need to change some versions of Clang and GCC or other utilities in the script.
 
 ## How to build
 
@@ -168,7 +174,11 @@ Options:
                                         Path with filename to export
   -u [ --username ] arg                 Authentication username
   -p [ --password ] arg                 Authentication password
-  -m [ --maxnrd ] arg (=0)              Number of max nodes to request data
+  --maxnpr arg (=0)                     Maximum size of the nodesToRead array
+  --maxnpb arg (=0)                     Maximum size of the nodesToBrowse array
+  --maxrpn arg (=0)                     Maximum number of references to return 
+                                        for each starting Node specified in the
+                                        request
   -t [ --timeout ] arg (=5000)          Response timeout in ms
   --perftimer arg (=0)                  Enable the performance timer 
                                         (true/false)
