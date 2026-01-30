@@ -37,24 +37,22 @@ public:
     Open62541ServerWrapper& operator=(const Open62541ServerWrapper& obj) = delete;
     Open62541ServerWrapper& operator=(Open62541ServerWrapper&& obj) = delete;
 
-    StatusResults ReadNodeClasses(std::vector<NodeClassesRequestResponse>& /*node_class_structure_lists*/) override
+    __attribute__((noreturn)) StatusResults ReadNodeClasses(std::vector<NodeClassesRequestResponse>& /*node_class_structure_lists*/) override
     {
         throw std::runtime_error("Not implemented");
     }
-    StatusResults ReadNodeReferences(std::vector<NodeReferencesRequestResponse>& /*node_references_structure_lists*/) override
+    __attribute__((noreturn)) StatusResults ReadNodeReferences(std::vector<NodeReferencesRequestResponse>& /*node_references_structure_lists*/) override
     {
         throw std::runtime_error("Not implemented");
     }
-    StatusResults ReadNodesAttributes(std::vector<NodeAttributesRequestResponse>& /*node_attr_structure_lists*/) override
+    __attribute__((noreturn)) StatusResults ReadNodesAttributes(std::vector<NodeAttributesRequestResponse>& /*node_attr_structure_lists*/, size_t /*attr_sum*/) override
     {
         throw std::runtime_error("Not implemented");
     }
-    StatusResults ReadNodeDataValue(const UATypesContainer<UA_ExpandedNodeId>& /*node_id*/, UATypesContainer<UA_Variant>& /*data_value*/) override
+    __attribute__((noreturn)) StatusResults ReadNodeDataValue(const UATypesContainer<UA_ExpandedNodeId>& /*node_id*/, UATypesContainer<UA_Variant>& /*data_value*/) override
     {
         throw std::runtime_error("Not implemented");
     }
-
-private:
     UA_Server& m_ua_server;
 };
 

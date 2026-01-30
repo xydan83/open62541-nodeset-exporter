@@ -220,37 +220,7 @@ public:
      * Custom types will be returned as a text description of the NodeID, for example: ns=1;i=2.
      * @warning When the function is called, the NodeIntermediateModel class object must have the UA_ATTRIBUTEID_DATATYPE attribute value set, otherwise an empty string will be returned.
      */
-    [[nodiscard]] std::string GetDataTypeAlias() const
-    {
-        if (m_node_class != UA_NodeClass::UA_NODECLASS_VARIABLE && m_node_class != UA_NodeClass::UA_NODECLASS_VARIABLETYPE || m_attributes.empty())
-        {
-            return "";
-        }
-
-        if (!m_attributes.contains(UA_AttributeId::UA_ATTRIBUTEID_DATATYPE))
-        {
-            return "";
-        }
-        auto data_type_optional_variant = m_attributes.at(UA_AttributeId::UA_ATTRIBUTEID_DATATYPE);
-        if (!data_type_optional_variant.has_value())
-        {
-            return "";
-        }
-
-        auto data_type_node_id = std::get<UATypesContainer<UA_NodeId>>(data_type_optional_variant.value());
-        // Option using a library function. But as practice has shown, its array contains fewer types.
-        // Trying to get a text alias of a standard type
-        //        const UA_DataType* const data_type_alias = UA_findDataType( // todo Perhaps it needs to be cached, since UA_findDataType uses linear search (O(n) worst case) + comparison of NodeId
-        //        structures
-        //            &data_type_node_id.GetRef());
-
-        if (data_type_node_id.GetRef().namespaceIndex == 0 && data_type_aliases.contains(data_type_node_id.GetRef().identifier.numeric)) // NOLINT(cppcoreguidelines-pro-type-union-access)
-        {
-            // Standard type
-            return data_type_aliases.at(data_type_node_id.GetRef().identifier.numeric); // NOLINT(cppcoreguidelines-pro-type-union-access)
-        }
-        return data_type_node_id.ToString(); // Type not found, returning NodeID in text form.
-    }
+    [[nodiscard]] std::string GetDataTypeAlias() const;
 
     /**
      * @brief Returns a list of tuples describing references to other model nodes and an alias for such references.
@@ -262,50 +232,13 @@ public:
      * @warning Each std::pair object returns a reference to a UATypesContainer<UA_ReferenceDescription> object, so the tuple itself does not own the object. The owner remains an object of the
      * NodeIntermediateModel class. This should be taken into account when using. This is done to avoid unnecessary copying of reference objects.
      */
-    [[nodiscard]] std::vector<std::pair<const UATypesContainer<UA_ReferenceDescription>&, std::string>> GetNodeReferenceTypeAliases() const
-    {
-        if (m_references.empty())
-        {
-            return {};
-        }
-        std::vector<std::pair<const UATypesContainer<UA_ReferenceDescription>&, std::string>> ref_types_aliases_tmp;
-        for (const auto& m_reference : m_references)
-        {
-            if (m_reference.GetRef().referenceTypeId.namespaceIndex == 0
-                && reference_type_aliases.contains(m_reference.GetRef().referenceTypeId.identifier.numeric)) // NOLINT(cppcoreguidelines-pro-type-union-access)
-            {
-                ref_types_aliases_tmp.emplace_back(m_reference, reference_type_aliases.at(m_reference.GetRef().referenceTypeId.identifier.numeric)); // NOLINT(cppcoreguidelines-pro-type-union-access)
-            }
-            else
-            {
-                UA_String node_id_txt = UA_STRING_NULL;
-                UA_NodeId_print(&m_reference.GetRef().referenceTypeId, &node_id_txt);
-                ref_types_aliases_tmp.emplace_back(m_reference, std::string{static_cast<char*>(static_cast<void*>(node_id_txt.data)), node_id_txt.length});
-            }
-        }
-        return ref_types_aliases_tmp;
-    }
+    [[nodiscard]] std::vector<std::pair<const UATypesContainer<UA_ReferenceDescription>&, std::string>> GetNodeReferenceTypeAliases() const;
 
     /**
      * @brief Method for string information about the model.
      * @return.
      */
-    [[nodiscard]] std::string ToString() const
-    {
-        std::string output;
-        output = "NodeIntermediateModel consists:\nNodeId: " + m_node_id.ToString() + "\nParentNodeId: " + m_parent_node_id.ToString() + "\nNodeClass: " + std::to_string(m_node_class)
-                 + "\nNodeReferenceDescriptions:";
-        for (const auto& reference : m_references)
-        {
-            output.append("\n" + reference.ToString());
-        }
-        output.append("\nNode Attributes:");
-        for (const auto& attributes : m_attributes)
-        {
-            output.append("\nAttributeID: " + std::to_string(attributes.first) + " : " + (attributes.second.has_value() ? VariantsOfAttrToString(attributes.second.value()) : "none"));
-        }
-        return output;
-    }
+    [[nodiscard]] std::string ToString() const;
 
 private:
     UATypesContainer<UA_ExpandedNodeId> m_node_id;

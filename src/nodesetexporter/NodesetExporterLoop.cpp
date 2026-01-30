@@ -9,49 +9,41 @@
 #include "nodesetexporter/NodesetExporterLoop.h"
 #include "nodesetexporter/common/PerformanceTimer.h"
 #include "nodesetexporter/common/Strings.h"
+#include "nodesetexporter/common/v_1.3_Compatibility.h"
 
 #include <open62541/types.h>
 
+#include <algorithm>
 #include <functional>
 
 // NOLINTBEGIN
-#define CONSTRUCT_MAP_ITEM(key)                                                                                                                                                                        \
-    {                                                                                                                                                                                                  \
-        key, #key                                                                                                                                                                                      \
-    }
+#define CONSTRUCT_MAP_ITEM(key) {key, #key}
 
-#define CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(key)                                                                                                                                                        \
-    {                                                                                                                                                                                                  \
-        UATypesContainer<UA_NodeId>(UA_NODEID_NUMERIC(0, key), UA_TYPES_NODEID), #key                                                                                                                  \
-    }
+#define CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(key) {UATypesContainer<UA_NodeId>(UA_NODEID_NUMERIC(0, key), UA_TYPES_NODEID), #key}
 
-#define CONSTRUCT_NUMERIC_EXPANDED_NODE_ID_SET_ITEM(key)                                                                                                                                               \
-    {                                                                                                                                                                                                  \
-        UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID_NUMERIC(0, key), UA_TYPES_EXPANDEDNODEID)                                                                                                \
-    }
+#define CONSTRUCT_NUMERIC_EXPANDED_NODE_ID_SET_ITEM(key) {UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID_NUMERIC(0, key), UA_TYPES_EXPANDEDNODEID)}
 // NOLINTEND
 
 namespace nodesetexporter
 {
 
 using PerformanceTimer = nodesetexporter::common::PerformanceTimer;
+using nodesetexporter::common::UaIdIdentifierToStdString;
 
 #pragma region Methods for obtaining and generating data
-
 
 #pragma region Getting ID attribute
 
 StatusResults NodesetExporterLoop::GetNodeAttributes(
     const std::vector<UATypesContainer<UA_ExpandedNodeId>>& node_ids,
-    const std::pair<size_t, size_t>& node_range,
     const std::vector<IOpen62541::NodeClassesRequestResponse>& node_classes_req_res,
     std::vector<IOpen62541::NodeAttributesRequestResponse>& nodes_attr_req_res)
 {
+    m_logger.Trace("Method called: GetNodeAttributes()");
 
-    // todo It is necessary to introduce tracking the Maxarraylength server parameter, how many elements the server will maintain in its array at a time, and in the case of attributes
-    //  For each node you need to request a lot of parameters, where, from the point of view of the exchange of data, each request of the attribute corresponds to one occupied element of an array of
-    //  the total, it can turn out like this, that when requested by 1000 knots, about 6-8 thousand are requested by attributes and the Maxarraylength and the server error are exceeded.
-    for (size_t index = node_range.first; index < node_range.second; ++index)
+    // Подготовка запроса для получения атрибутов узлов с возможностью учета ограничения MaxNodesPerRead.
+    size_t attr_counter = 0;
+    for (size_t index = 0; index < node_ids.size(); ++index)
     {
         auto attr = GetCommonNodeAttributes();
         switch (node_classes_req_res.at(index).node_class)
@@ -78,25 +70,20 @@ StatusResults NodesetExporterLoop::GetNodeAttributes(
             m_logger.Warning(
                 "Get attributes of node class {} not implemented. Node ID: {}",
                 m_ignored_nodeclasses.at(node_classes_req_res.at(index).node_class),
-                node_classes_req_res.at(index).exp_node_id.ToString());
+                node_classes_req_res.at(index).exp_node_id.get().ToString());
             attr.clear();
         }
-        nodes_attr_req_res.push_back(IOpen62541::NodeAttributesRequestResponse{node_ids.at(index), attr});
+        attr_counter += attr.size();
+        nodes_attr_req_res.emplace_back(IOpen62541::NodeAttributesRequestResponse{.exp_node_id = node_ids.at(index), .attrs = attr});
     }
     // The OPC UA standard for receiving attributes guarantees - The size and order of this list matches the size and order of the nodesToReadrequest
     // parameter. https://reference.opcfoundation.org/Core/Part4/v104/docs/5.10.2 I extend this rule to the library as well.
     if (!nodes_attr_req_res.at(0).attrs.empty()) // There should always be at least one node with an unnecessary number of attributes to fulfill the request.
     {
-        if (m_open62541_lib.ReadNodesAttributes(nodes_attr_req_res) == StatusResults::Fail) // REQUEST<-->RESPONSE
-        {
-            return StatusResults::Fail;
-        }
+        return m_open62541_lib.ReadNodesAttributes(nodes_attr_req_res, attr_counter); // REQUEST<-->RESPONSE
     }
-    if (node_range.second - node_range.first != nodes_attr_req_res.size())
-    {
-        throw std::runtime_error("range_for_nodes.second - range_for_nodes.first != nodes_attr_req_res.size()");
-    }
-    return StatusResults::Good;
+
+    return StatusResults{StatusResults::Good};
 }
 
 #pragma endregion Getting ID attribute
@@ -104,129 +91,187 @@ StatusResults NodesetExporterLoop::GetNodeAttributes(
 
 #pragma region Receiving and processing reference
 
-StatusResults NodesetExporterLoop::GetNodeReferences(
-    const std::vector<UATypesContainer<UA_ExpandedNodeId>>& node_ids,
-    const std::pair<size_t, size_t>& node_range,
-    std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res)
+StatusResults NodesetExporterLoop::GetNodeReferences(const std::vector<UATypesContainer<UA_ExpandedNodeId>>& node_ids, std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res)
 {
     m_logger.Trace("Method called: GetNodeReferences()");
 
     // Request for obtaining links of all types for each node. According to indexation of links as with attributes.
-    std::copy(node_ids.begin() + static_cast<int64_t>(node_range.first), node_ids.begin() + static_cast<int64_t>(node_range.second), std::back_inserter(node_references_req_res));
+    std::ranges::copy(node_ids, std::back_inserter(node_references_req_res));
     if (m_open62541_lib.ReadNodeReferences(node_references_req_res) == StatusResults::Fail) // REQUEST<-->RESPONSE
     {
         return StatusResults::Fail;
     }
-    // Check the statuses of each individual NodeId request
 
+    // I check the statuses of each individual NodeID request
     for (size_t index = 0; index < node_references_req_res.size(); ++index)
     {
-        // In any node, at least one link must be. If it is not there, I think that there was a mistake to obtain a list or such a node does not exist.
+        // Any node must have at least one link. If it is not there, I believe that there was an error in obtaining the list or that such a node does not exist.
         if (node_references_req_res.at(index).references.empty())
         {
-            // In the case of a flat list and the reconstruction mode of the starting node, I ignore the error of obtaining links (the node does not exist).
-            // Note: for the mode of the flat list and the indication of the start node i=85 there is no difference whether I receive links from it or not.
-            if (m_external_options.flat_list_of_nodes.create_missing_start_node && m_external_options.flat_list_of_nodes.is_enable && node_range.first == 0 && index == 0)
+            // In the case of the flat list mode and the mode of recreating the starting node, I ignore the error receiving links (node does not exist).
+            // Note: For flat list mode and specifying the starting node i=85, it makes no difference whether I get links from it or not.
+            if (m_external_options.flat_list_of_nodes.create_missing_start_node && m_external_options.flat_list_of_nodes.is_enable && index == 0)
             {
                 continue;
             }
             return StatusResults::Fail;
         }
     }
-    if (node_range.second - node_range.first != node_references_req_res.size())
-    {
-        throw std::runtime_error("range_for_nodes.second - range_for_nodes.first != node_references_req_res.size()");
-    }
     return StatusResults::Good;
 }
 
-StatusResults NodesetExporterLoop::KepServerRefFix(std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res)
+void NodesetExporterLoop::CorrectionUnnecessaryHasTypeDefinitionReferences(std::vector<UATypesContainer<UA_ReferenceDescription>>& ref_desc_arr)
 {
+    m_logger.Trace("Method called: CorrectionUnnecessaryHasTypeDefinitionReferences()");
+
+    bool has_type_defenition_ref_detected = false;
+    m_filtered_references_tmp.clear();
+    m_filtered_references_tmp.reserve(ref_desc_arr.size());
     // Checking for the presence of back references and generating them from text identifiers, as well as replacing the type HasTypeDefinition = BaseVariableType(62).
     // We need to know in principle that there are no back references, even if we can't add them.
-    for (auto& node_ref : node_references_req_res) // Node
+    for (auto& ref : ref_desc_arr) // References
     {
-        // If the node does not have a list of links, we miss the processing of such a node
-        if (node_ref.references.empty())
+        if (UA_NodeId_equal(&ref.GetRef().referenceTypeId, &m_ns0id_hastypedefenition_node_id))
         {
-            continue;
-        }
-
-        bool are_we_have_inverse_ref = false;
-        bool are_we_found_base_variable_type = false;
-        for (auto& ref : node_ref.references) // References
-        {
-            // For unknown reasons, in KepServer, nodes of the Variable class are set to HasTypeDefinition = BaseVariableType(62).
-            // This abstract type cannot be used directly on nodes of this class. When importing nodesetloader we get an error.
-            // In this case, the easiest option is to change HasTypeDefinition to a more specific, although still generic, but not abstract type BaseDataVariableType(63).
-            if (UA_NodeId_equal(&ref.GetRef().referenceTypeId, &m_ns0id_hastypedefenition_node_id) && UA_NodeId_equal(&ref.GetRef().nodeId.nodeId, &m_ns0id_basevariabletype_node_id))
-            {
-                m_logger.Warning("For node {} we find reference with HasTypeDefinition = BaseVariableType(62). Change to BaseDataVariableType(63).", node_ref.exp_node_id.ToString());
-                ref.GetRef().nodeId.nodeId.identifier.numeric = UA_NS0ID_BASEDATAVARIABLETYPE; // NOLINT(cppcoreguidelines-pro-type-union-access)
-                are_we_found_base_variable_type = true;
-            }
-
-            // Only interested in back references
+            // Since it was noticed that some systems set a back reference for the HasTypeDefinition type, to avoid
+            // incorrect processing for ParentID, all such links will initially be assigned direct directions.
             if (!ref.GetRef().isForward)
             {
-                are_we_have_inverse_ref = true;
+                m_logger.Warning("A reverse reference of type HasTypeDefinition was found for node {}. Fixing...", UaIdIdentifierToStdString(ref.GetRef().nodeId.nodeId));
             }
-
-            // If both search criteria found what they were looking for, we can end the loop early, ensuring O(n) in the worst case.
-            if (are_we_found_base_variable_type && are_we_have_inverse_ref)
+            ref.GetRef().isForward = true;
+            // Add HasTypeDefinition only once.
+            // The SourceNode of this ReferenceType shall be an Object or Variable. If the SourceNode is an Object, then the TargetNode shall be an ObjectType; if the SourceNode is a Variable,
+            // then the TargetNode shall be a VariableType - This means that the direction always (source) goes from the variable or object to its type
+            // Each Variable and each Object shall be the SourceNode of exactly one HasTypeDefinition Reference. - but this means that each object can have only one such
+            // link. https://reference.opcfoundation.org/Core/Part3/v104/docs/7.13
+            if (!has_type_defenition_ref_detected)
             {
-                break;
+                m_filtered_references_tmp.emplace_back(std::move(ref));
             }
-        }
+            else
+            {
+                m_logger.Warning("More than one reference of type HasTypeDefinition was found on node {}. Removing...", UaIdIdentifierToStdString(ref.GetRef().nodeId.nodeId));
+            }
 
-        if (are_we_have_inverse_ref)
-        {
+            has_type_defenition_ref_detected = true;
             continue;
         }
-
-        m_logger.Warning("For node {} we didn't find a inverse reference. Let's just add one.", node_ref.exp_node_id.ToString());
-        // Algorithm for adding back references from text node identifiers.
-        // The algorithm does not use deep analysis to identify reference types. All ReferenceTypes will be of type HasComponent.
-        // There is also no solution for analyzing the namespace in case the parent and child may have different namespaces.
-        if (node_ref.exp_node_id.GetRef().nodeId.identifierType == UA_NodeIdType::UA_NODEIDTYPE_STRING)
-        {
-            // Create one back reference that will point to the parent
-            UATypesContainer<UA_ReferenceDescription> new_ref(UA_TYPES_REFERENCEDESCRIPTION);
-            UA_NodeId_copy(&m_ns0id_hascomponent_node_id, &new_ref.GetRef().referenceTypeId);
-            new_ref.GetRef().isForward = false;
-            auto child_str = node_ref.exp_node_id.ToString();
-            auto found_child_dot_index = child_str.find_last_of('.');
-            // If a separator dot is found, remove the identifier after the last separator dot in the identifier, including the dot itself.
-            if (found_child_dot_index != std::string::npos)
-            {
-                child_str = child_str.substr(0, found_child_dot_index);
-            }
-            else // All nodes for which the parent cannot be determined further, I substitute the most basic node of the object.
-            {
-                child_str = "i=" + std::to_string(UA_NS0ID_OBJECTSFOLDER);
-            }
-            auto parent_node_id = UA_EXPANDEDNODEID(child_str.c_str());
-            UA_ExpandedNodeId_copy(&parent_node_id, &new_ref.GetRef().nodeId);
-            UA_ExpandedNodeId_clear(&parent_node_id); // Since we don’t know whether the object will be a string object (with a pointer) or a numeric one, so we’ll clean it up.
-            m_logger.Debug("For node {} adding reference:\n {}", node_ref.exp_node_id.ToString(), new_ref.ToString());
-            node_ref.references.push_back(new_ref);
-        }
-        else
-        {
-            m_logger.Error("Node {} didn't have a string ID, so we can't build a inverse reference.", node_ref.exp_node_id.ToString());
-            return StatusResults::Fail;
-        }
+        m_filtered_references_tmp.emplace_back(std::move(ref));
     }
+
+    // Replace the temporary array with processed links with the one that was previously received (and with missing links, in theory, after moving they should
+    // be disabled.
+    ref_desc_arr.swap(m_filtered_references_tmp);
+}
+
+inline bool NodesetExporterLoop::HasReverseReference(const std::vector<UATypesContainer<UA_ReferenceDescription>>& ref_desc_arr)
+{
+    m_logger.Trace("Method called: HasReverseReference()");
+    return std::ranges::any_of(
+        ref_desc_arr,
+        [](const auto& ref)
+        {
+            return !ref.GetRef().isForward;
+        });
+}
+
+inline bool NodesetExporterLoop::ReplaceBaseVariableType(const UATypesContainer<UA_ExpandedNodeId>& node_id, std::vector<UATypesContainer<UA_ReferenceDescription>>& ref_desc_arr)
+{
+    m_logger.Trace("Method called: ReplaceBaseVariableType()");
+    return std::ranges::any_of(
+        ref_desc_arr,
+        [this, &node_id](auto& ref)
+        {
+            if (UA_NodeId_equal(&ref.GetRef().referenceTypeId, &m_ns0id_hastypedefenition_node_id) && UA_NodeId_equal(&ref.GetRef().nodeId.nodeId, &m_ns0id_basevariabletype_node_id))
+            {
+                m_logger.Warning("For node {} we find reference with HasTypeDefinition = BaseVariableType(62). Change to BaseDataVariableType(63).", node_id.ToString());
+                ref.GetRef().nodeId.nodeId.identifier.numeric = UA_NS0ID_BASEDATAVARIABLETYPE; // NOLINT(cppcoreguidelines-pro-type-union-access)
+                return true;
+            }
+            return false;
+        });
+}
+
+inline bool NodesetExporterLoop::AddNodeReverseReference(const UATypesContainer<UA_ExpandedNodeId>& node_id, std::vector<UATypesContainer<UA_ReferenceDescription>>& ref_desc_arr)
+{
+    m_logger.Trace("Method called: AddNodeReverseReference()");
+    if (node_id.GetRef().nodeId.identifierType != UA_NODEIDTYPE_STRING)
+    {
+        m_logger.Error("Node {} didn't have a string ID, so we can't build a inverse reference.", node_id.ToString());
+        return false;
+    }
+
+    // I create one backlink that will point to the parent
+    open62541::UATypesContainer<UA_ReferenceDescription> new_ref(UA_TYPES_REFERENCEDESCRIPTION);
+    UA_NodeId_copy(&m_ns0id_hascomponent_node_id, &new_ref.GetRef().referenceTypeId);
+    new_ref.GetRef().isForward = false;
+    auto child_str = node_id.ToString();
+    auto found_child_dot_index = child_str.find_last_of('.');
+    // If a separator point is found, we delete the identifier after the last separator point in the identifier, including the point itself.
+    if (found_child_dot_index != std::string::npos)
+    {
+        child_str = child_str.substr(0, found_child_dot_index);
+    }
+    else // For all nodes for which the parent cannot be further determined, I substitute the most basic node of the object.
+    {
+        child_str = "i=" + std::to_string(UA_NS0ID_OBJECTSFOLDER);
+    }
+    auto parent_node_id = UA_EXPANDEDNODEID(child_str.c_str());
+    UA_ExpandedNodeId_copy(&parent_node_id, &new_ref.GetRef().nodeId);
+    UA_ExpandedNodeId_clear(&parent_node_id); // Так-как не знаем, строковой (с указателем) будет объект или числовой, поэтому будем чистить.
+    m_logger.Debug("For node {} adding reference:\n {}", node_id.ToString(), new_ref.ToString());
+    ref_desc_arr.push_back(new_ref);
+    return true;
+}
+
+StatusResults NodesetExporterLoop::KepServerRefFix(IOpen62541::NodeReferencesRequestResponse& node_reference_req_res)
+{
+    m_logger.Trace("Method called: KepServerRefFix()");
+
+    // Checking for the presence of backlinks and generating them from text identifiers, as well as replacing the type HasTypeDefinition = BaseVariableType(62).
+    // We need to know in principle that there are no backlinks, even if we can't add them.
+    // If a node does not have a list of links, we skip processing of such a node
+    if (node_reference_req_res.references.empty())
+    {
+        return StatusResults::Good;
+    }
+
+    // Let's adjust the direction of HasTypeDefinition type links and remove unnecessary links. It is noticed that sometimes some Servers (MasterOPC)
+    // they produce incorrect links of this type and there are more than one of them.
+    CorrectionUnnecessaryHasTypeDefinitionReferences(node_reference_req_res.references);
+
+    // For unknown reasons, in KepServer, nodes of the Variable class are set to HasTypeDefinition = BaseVariableType(62).
+    // This abstract type cannot be used directly on nodes of this class. When importing nodesetloader we get
+    // error. In this case, the easiest option is to change HasTypeDefinition to a more specific one, although still generic, but
+    // non-abstract type BaseDataVariableType(63).
+    ReplaceBaseVariableType(node_reference_req_res.exp_node_id, node_reference_req_res.references);
+
+    // If backlinks are found, then there is no point for the current node to go further.
+    if (HasReverseReference(node_reference_req_res.references))
+    {
+        return StatusResults::Good;
+    }
+
+    m_logger.Warning("For node {} we didn't find a inverse reference. Let's just add one.", node_reference_req_res.exp_node_id.get().ToString());
+    // Algorithm for adding backlinks from text node identifiers.
+    // The algorithm does not use deep analysis to identify link types. All ReferenceTypes will be of type HasComponent.
+    // There is also no solution for analyzing the namespace in case the parent and child may have different namespaces.
+    if (!AddNodeReverseReference(node_reference_req_res.exp_node_id, node_reference_req_res.references))
+    {
+        return StatusResults::Fail;
+    }
+
     return StatusResults::Good;
 }
 
-inline void NodesetExporterLoop::DeleteFailedReferences(size_t node_index, std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res)
+inline void NodesetExporterLoop::DeleteFailedReferences(IOpen62541::NodeReferencesRequestResponse& node_reference_req_res)
 {
     m_logger.Trace("Method called: DeleteFailedReferences()");
 
     std::vector<UATypesContainer<UA_ReferenceDescription>> references_after_filter;
-    references_after_filter.reserve(node_references_req_res.at(node_index).references.size());
-    for (auto& ref : node_references_req_res.at(node_index).references)
+    references_after_filter.reserve(node_reference_req_res.references.size());
+    for (auto& ref : node_reference_req_res.references)
     {
         // todo When I add a list of standard ns = 0 knots, you need to make it so that we do not filter only standard
         //  ns=0 that will be on this list, otherwise we filter, as it happens that the custom nodes are added to ns=0.
@@ -239,9 +284,9 @@ inline void NodesetExporterLoop::DeleteFailedReferences(size_t node_index, std::
                 m_logger.Warning(
                     "The {} reference {} ==> {} is IGNORED because this node is deleted",
                     ref.GetRef().isForward ? "forward" : "reverse",
-                    node_references_req_res.at(node_index).exp_node_id.ToString(),
+                    node_reference_req_res.exp_node_id.get().ToString(),
                     node_in_container.ToString());
-                continue; // Don't add a reference
+                continue; // Не добавляем ссылку
             }
             // Check for a reference to a missing node filtered in the external environment
             if (!m_node_ids_set_copy.contains(node_in_container))
@@ -249,51 +294,51 @@ inline void NodesetExporterLoop::DeleteFailedReferences(size_t node_index, std::
                 m_logger.Warning(
                     "The {} reference {} ==> {} is IGNORED because this node is missing",
                     ref.GetRef().isForward ? "forward" : "reverse",
-                    node_references_req_res.at(node_index).exp_node_id.ToString(),
+                    node_reference_req_res.exp_node_id.get().ToString(),
                     node_in_container.ToString());
                 continue; // Do not add a reference
             }
         }
         references_after_filter.emplace_back(std::move(ref));
     }
-    node_references_req_res.at(node_index).references.swap(references_after_filter);
+    node_reference_req_res.references.swap(references_after_filter);
 }
 
-inline void NodesetExporterLoop::DeleteAllHierarhicalReferences(size_t node_index, std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res)
+inline void NodesetExporterLoop::DeleteAllHierarchicalReferences(IOpen62541::NodeReferencesRequestResponse& node_reference_req_res)
 {
-    m_logger.Trace("Method called: DeleteAllHierarhicalReferences()");
+    m_logger.Trace("Method called: DeleteAllHierarchicalReferences()");
 
     std::vector<UATypesContainer<UA_ReferenceDescription>> references_after_filter;
-    for (auto& ref : node_references_req_res.at(node_index).references)
+    for (auto& ref : node_reference_req_res.references)
     {
         // Checking for a hierarchical link of any direction. Such links are not added to the list after the filter
-        UATypesContainer node_in_container(ref.GetRef().nodeId, UA_TYPES_EXPANDEDNODEID);
+        const UATypesContainer node_in_container(ref.GetRef().nodeId, UA_TYPES_EXPANDEDNODEID);
         if (m_hierarhical_references.contains(UATypesContainer(ref.GetRef().referenceTypeId, UA_TYPES_NODEID)))
         {
             m_logger.Warning(
                 "{} hierarchical reference {} ==> {}  was detected and removed.",
                 ref.GetRef().isForward ? "Forward" : "Reverse",
-                node_references_req_res.at(node_index).exp_node_id.ToString(),
+                node_reference_req_res.exp_node_id.get().ToString(),
                 node_in_container.ToString());
             continue;
         }
         references_after_filter.emplace_back(std::move(ref));
     }
-    node_references_req_res.at(node_index).references.swap(references_after_filter);
+    node_reference_req_res.references.swap(references_after_filter);
 }
 
-inline void NodesetExporterLoop::DeleteNotHasSubtypeReference(size_t node_index, UA_NodeClass node_class, std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res)
+inline void NodesetExporterLoop::DeleteNotHasSubtypeReference(UA_NodeClass node_class, IOpen62541::NodeReferencesRequestResponse& node_reference_req_res)
 {
     m_logger.Trace("Method called: DeleteNotHasSubtypeReference()");
 
     std::vector<UATypesContainer<UA_ReferenceDescription>> references_after_filter;
-    references_after_filter.reserve(node_references_req_res.at(node_index).references.size());
-    bool is_type_class_node = m_types_nodeclasses.contains(node_class);
-    for (auto& ref : node_references_req_res.at(node_index).references)
+    references_after_filter.reserve(node_reference_req_res.references.size());
+    const auto node_class_contains_result = m_types_nodeclasses.contains(node_class);
+    for (auto& ref : node_reference_req_res.references)
     {
         // In the nodes of the TYPES class, I check the back references to see if they contain references other than HasSubtype. If detected, skip adding such references to the resulting array
         // of the node in question, since the main parent references must be of this type. And all other references will be restored by the open62541 library.
-        if (is_type_class_node) // If the node class being processed is a TYPE class, then...
+        if (node_class_contains_result) // If the node class being processed is a TYPE class, then...
         {
             // Looking for a back reference with a reference type other than HasSubtype, but ignoring a reference of type i=85, since it should already be in the right place.
             // It is logical to assume that isForward(False) only have hierarchical references (no clear confirmation found in the standard), which can protect against removal of
@@ -313,21 +358,21 @@ inline void NodesetExporterLoop::DeleteNotHasSubtypeReference(size_t node_index,
                     reference_name_of_id,
                     UATypesContainer<UA_ExpandedNodeId>(ref.GetRef().nodeId, UA_TYPES_EXPANDEDNODEID).ToString(),
                     m_types_nodeclasses.at(node_class),
-                    node_references_req_res.at(node_index).exp_node_id.ToString());
+                    node_reference_req_res.exp_node_id.get().ToString());
                 continue;
             }
         }
         references_after_filter.emplace_back(std::move(ref));
     }
-    node_references_req_res.at(node_index).references.swap(references_after_filter);
+    node_reference_req_res.references.swap(references_after_filter);
 }
 
 inline void NodesetExporterLoop::AddStartNodeIfNotFound(
     size_t node_index,
     UA_NodeClass node_class,
     std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res,
-    bool& has_start_node_subtype_detected,
-    uint64_t& start_node_reverse_reference_counter)
+    HasStartNodeSubtypeDetected& has_start_node_subtype_detected,
+    StartNodeReverseReferenceCounter& start_node_reverse_reference_counter)
 {
     m_logger.Trace("Method called: AddStartNodeIfNotFound()");
 
@@ -363,7 +408,7 @@ inline void NodesetExporterLoop::AddStartNodeIfNotFound(
         // Addition if the starting node is a node of the class TYPES.
         AddCustomRefferenceToNodeID(m_external_options.parent_start_node_replacer, node_index, UA_NS0ID_ORGANIZES, false, node_references_req_res);
 
-        // Дополнение, если стартовый узел является узлом класса ТИПОв.
+        // Addition if the starting node is a node of the class TYPES.
         if (m_types_nodeclasses.contains(node_class))
         {
             // If the starting node is the class of the TYPES node, then we mark the presence of such a starting node for further actions later.
@@ -388,8 +433,8 @@ inline void NodesetExporterLoop::CreateAttributesForStartNode(
     }
 
     // Add attributes of the start node
-    auto start_node_id_name = common::UaGuidIdentifierToStdString(node_attr_res_req.at(start_node_index).exp_node_id.GetRef().nodeId);
-    const auto start_node_id_namepspace = node_attr_res_req.at(start_node_index).exp_node_id.GetRef().nodeId.namespaceIndex;
+    auto start_node_id_name = common::UaIdIdentifierToStdString(node_attr_res_req.at(start_node_index).exp_node_id.get().GetRef().nodeId);
+    const auto start_node_id_namepspace = node_attr_res_req.at(start_node_index).exp_node_id.get().GetRef().nodeId.namespaceIndex;
     node_attr_res_req.at(start_node_index)
         .attrs.at(UA_ATTRIBUTEID_BROWSENAME)
         .emplace(UATypesContainer<UA_QualifiedName>(UA_QUALIFIEDNAME(start_node_id_namepspace, start_node_id_name.data()), UA_TYPES_QUALIFIEDNAME));
@@ -410,7 +455,7 @@ inline void NodesetExporterLoop::CreateAttributesForStartNode(
     node_references_req_res.at(start_node_index).references.emplace(node_references_req_res.at(start_node_index).references.begin(), std::move(insertion_ref_desc));
 
 
-    m_logger.Info("The attributes and type reference for the start node '{}' in 'Flat Mode' have been created.", node_attr_res_req.at(start_node_index).exp_node_id.ToString());
+    m_logger.Info("The attributes and type reference for the start node '{}' in 'Flat Mode' have been created.", node_attr_res_req.at(start_node_index).exp_node_id.get().ToString());
 }
 
 void NodesetExporterLoop::AddCustomRefferenceToNodeID(
@@ -424,7 +469,7 @@ void NodesetExporterLoop::AddCustomRefferenceToNodeID(
 
     m_logger.Info(
         "Adding to node '{}' a new reference '{}' with reference type id '{}' and is_forward '{}'.",
-        node_references_req_res.at(add_ref_to_node_by_index).exp_node_id.ToString(),
+        node_references_req_res.at(add_ref_to_node_by_index).exp_node_id.get().ToString(),
         ref_pointing_to_node_id.ToString(),
         reference_type_id,
         is_forward ? "true" : "false");
@@ -444,26 +489,24 @@ inline std::unique_ptr<UATypesContainer<UA_ExpandedNodeId>> NodesetExporterLoop:
 {
     m_logger.Trace("Method called: GetParentNodeId()");
 
+    const auto node_class_contains_result = m_types_nodeclasses.contains(node_class);
     for (const auto& ref_obj : node_references_req_res.at(node_index).references)
     {
         if (!ref_obj.GetRef().isForward)
         {
             // If nodes are classes of TYPES, then for such types ParentNodeID is refType = UA_NS0ID_HASSUBTYPE
+            if (node_class_contains_result && !UA_NodeId_equal(&ref_obj.GetRef().referenceTypeId, &m_ns0id_hassubtype_node_id))
+            {
+                continue;
+            }
+
+            // Если узлы являются классами ТИПОВ - то для таких типов ParentNodeID является refType = UA_NS0ID_HASSUBTYPE
             // https://reference.opcfoundation.org/Core/Part3/v104/docs/5.5.2 - ObjectType NodeClass
             // https://reference.opcfoundation.org/Core/Part3/v104/docs/5.6.5 - VariableType NodeClass
             // https://reference.opcfoundation.org/Core/Part3/v104/docs/5.8.3 - DataType NodeClass (not specified, but visible from UANodeSet.xsd)
             // https://reference.opcfoundation.org/Core/Part3/v104/docs/5.3 - ReferenceType NodeClass
-            // todo Learn to work with HasSubtype subtypes and recognize their affiliation.
-            if (m_types_nodeclasses.contains(node_class) && UA_NodeId_equal(&ref_obj.GetRef().referenceTypeId, &m_ns0id_hassubtype_node_id))
-            {
-                return std::make_unique<UATypesContainer<UA_ExpandedNodeId>>(UATypesContainer<UA_ExpandedNodeId>(ref_obj.GetRef().nodeId, UA_TYPES_EXPANDEDNODEID));
-            }
-
             // If the nodes are not TYPE classes (Instance classes). Parents can be indicated by various types of references.
-            if (!m_types_nodeclasses.contains(node_class))
-            {
-                return std::make_unique<UATypesContainer<UA_ExpandedNodeId>>(UATypesContainer<UA_ExpandedNodeId>(ref_obj.GetRef().nodeId, UA_TYPES_EXPANDEDNODEID));
-            }
+            return std::make_unique<UATypesContainer<UA_ExpandedNodeId>>(ref_obj.GetRef().nodeId, UA_TYPES_EXPANDEDNODEID); // Обнаружили первую родительскую ссылку - вышли из цикла
         }
     }
     return nullptr;
@@ -476,13 +519,13 @@ inline std::unique_ptr<UATypesContainer<UA_ExpandedNodeId>> NodesetExporterLoop:
     switch (node_class)
     {
     case UA_NODECLASS_OBJECTTYPE:
-        return std::make_unique<UATypesContainer<UA_ExpandedNodeId>>(UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEOBJECTTYPE), UA_TYPES_EXPANDEDNODEID));
+        return std::make_unique<UATypesContainer<UA_ExpandedNodeId>>(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEOBJECTTYPE), UA_TYPES_EXPANDEDNODEID);
     case UA_NODECLASS_VARIABLETYPE:
-        return std::make_unique<UATypesContainer<UA_ExpandedNodeId>>(UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEVARIABLETYPE), UA_TYPES_EXPANDEDNODEID));
+        return std::make_unique<UATypesContainer<UA_ExpandedNodeId>>(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEVARIABLETYPE), UA_TYPES_EXPANDEDNODEID);
     case UA_NODECLASS_REFERENCETYPE:
-        return std::make_unique<UATypesContainer<UA_ExpandedNodeId>>(UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_HIERARCHICALREFERENCES), UA_TYPES_EXPANDEDNODEID));
+        return std::make_unique<UATypesContainer<UA_ExpandedNodeId>>(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_HIERARCHICALREFERENCES), UA_TYPES_EXPANDEDNODEID);
     case UA_NODECLASS_DATATYPE:
-        return std::make_unique<UATypesContainer<UA_ExpandedNodeId>>(UATypesContainer<UA_ExpandedNodeId>(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEDATATYPE), UA_TYPES_EXPANDEDNODEID));
+        return std::make_unique<UATypesContainer<UA_ExpandedNodeId>>(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEDATATYPE), UA_TYPES_EXPANDEDNODEID);
     default:
         throw(std::out_of_range("node_classes_req_res[index].node.class"));
     }
@@ -495,7 +538,7 @@ StatusResults NodesetExporterLoop::GetNamespaces(std::vector<std::string>& names
 {
     m_logger.Trace("Method called: GetNamespaces()");
     // Read all server namespaces
-    UATypesContainer<UA_ExpandedNodeId> server_namespace_array_request(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_SERVER_NAMESPACEARRAY), UA_TYPES_EXPANDEDNODEID);
+    const UATypesContainer<UA_ExpandedNodeId> server_namespace_array_request(UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_SERVER_NAMESPACEARRAY), UA_TYPES_EXPANDEDNODEID);
     UATypesContainer<UA_Variant> server_namespace_array_response(UA_TYPES_VARIANT);
     if (m_open62541_lib.ReadNodeDataValue(server_namespace_array_request, server_namespace_array_response) == StatusResults::Fail) // REQUEST<-->RESPONSE
     {
@@ -509,7 +552,7 @@ StatusResults NodesetExporterLoop::GetNamespaces(std::vector<std::string>& names
         {
             // Should we compare row by row with "http://opcfoundation.org/UA/" or hope for a zero index?
             auto ua_namespace = static_cast<UA_String*>(server_namespace_array_response.GetRef().data)[index]; // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-            namespaces.emplace_back(static_cast<char*>(static_cast<void*>(ua_namespace.data)), ua_namespace.length);
+            namespaces.emplace_back(reinterpret_cast<char*>(ua_namespace.data), ua_namespace.length); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
         }
     }
     else
@@ -538,23 +581,19 @@ StatusResults NodesetExporterLoop::GetAliases(const std::vector<NodeIntermediate
                     m_logger.Warning("DATATYPE has an empty value in NodeID: {}", node_intermediate_obj.GetExpNodeId().ToString());
                     continue;
                 }
-                if (const auto* const data_type_node_id = std::get_if<UATypesContainer<UA_NodeId>>(&datatype_attr.value()))
-                {
-                    // Save only if the datatype belongs to the OPC UA base space.
-                    if (data_type_node_id->GetRef().namespaceIndex == 0)
-                    {
-                        auto alias_str = node_intermediate_obj.GetDataTypeAlias();
-                        // Alias must be in only one instance
-                        if (!aliases.contains(alias_str))
-                        {
-                            aliases.insert({alias_str, *data_type_node_id});
-                        }
-                    }
-                }
-                else
+
+                const auto* const data_type_node_id = std::get_if<UATypesContainer<UA_NodeId>>(&datatype_attr.value());
+                if (data_type_node_id == nullptr)
                 {
                     m_logger.Critical("DATATYPE has wrong type in NodeID: {}", node_intermediate_obj.GetExpNodeId().ToString());
                     return StatusResults::Fail;
+                }
+
+                // I save only if the datatype belongs to the OPC UA base space.
+                if (data_type_node_id->GetRef().namespaceIndex == 0)
+                {
+                    // Alias must be in only one instance
+                    aliases.try_emplace(node_intermediate_obj.GetDataTypeAlias(), *data_type_node_id);
                 }
             }
             catch (std::out_of_range&)
@@ -564,15 +603,12 @@ StatusResults NodesetExporterLoop::GetAliases(const std::vector<NodeIntermediate
         }
 
         // Add reference types as aliases
-        for (const auto& ref : node_intermediate_obj.GetNodeReferenceTypeAliases())
+        for (const auto& [ref_desc, alias] : node_intermediate_obj.GetNodeReferenceTypeAliases())
         {
-            if (ref.first.GetRef().referenceTypeId.namespaceIndex == 0)
+            if (ref_desc.GetRef().referenceTypeId.namespaceIndex == 0)
             {
                 // Alias must be in only one instance
-                if (!aliases.contains(ref.second))
-                {
-                    aliases.insert({ref.second, UATypesContainer<UA_NodeId>(ref.first.GetRef().referenceTypeId, UA_TYPES_NODEID)});
-                }
+                aliases.try_emplace(alias, ref_desc.GetRef().referenceTypeId, UA_TYPES_NODEID);
             }
         }
     }
@@ -580,16 +616,16 @@ StatusResults NodesetExporterLoop::GetAliases(const std::vector<NodeIntermediate
 }
 
 inline StatusResults NodesetExporterLoop::GetNodeClasses(
-    const std::vector<UATypesContainer<UA_ExpandedNodeId>>& node_ids,
-    const std::pair<size_t, size_t>& node_range,
+    const std::vector<UATypesContainer<UA_ExpandedNodeId>>& list_of_nodes_from_one_start_node,
     std::vector<IOpen62541::NodeClassesRequestResponse>& node_classes_req_res)
 {
     m_logger.Trace("Method called: GetNodeClasses()");
 
-    // todo I noticed that now it would be more convenient and faster to store the map from (NodeID|Class), since there is a need to obtain a class depending on the node.
-    //  Doing a search cycle through an array takes a long time.
-    std::copy(node_ids.begin() + static_cast<int64_t>(node_range.first), node_ids.begin() + static_cast<int64_t>(node_range.second), std::back_inserter(node_classes_req_res));
+    auto timer_nc = PREPARE_TIMER(m_external_options.is_perf_timer_enable);
+    node_classes_req_res.reserve(list_of_nodes_from_one_start_node.size());
+    std::ranges::copy(list_of_nodes_from_one_start_node.begin(), list_of_nodes_from_one_start_node.end(), std::back_inserter(node_classes_req_res));
     const auto status = m_open62541_lib.ReadNodeClasses(node_classes_req_res); // REQUEST<-->RESPONSE
+    GET_TIME_ELAPSED_FMT_FORMAT(timer_nc, m_logger.Info, "ReadNodeClasses operation + copy nodeIDs: ", "");
 
     if (node_classes_req_res.empty())
     {
@@ -599,173 +635,237 @@ inline StatusResults NodesetExporterLoop::GetNodeClasses(
 
     // In the case of operation in flat components, as well as the mode of creating the starting nodes, I denote the class of the created start node. Only the start node is processed and
     // just not part of the standard, in fact, the main search goes by the node not i=85.
-    if (m_external_options.flat_list_of_nodes.is_enable && m_external_options.flat_list_of_nodes.create_missing_start_node && node_range.first == 0
+    if (m_external_options.flat_list_of_nodes.is_enable && m_external_options.flat_list_of_nodes.create_missing_start_node
         && !m_ns0_opcua_standard_node_ids.contains(node_classes_req_res.at(0).exp_node_id))
     {
-        m_logger.Warning("NodeID '{}' is the 'Start Node' in 'Flat Mode' and will be created as an Object node class.", node_classes_req_res.at(0).exp_node_id.ToString());
+        m_logger.Warning("NodeID '{}' is the 'Start Node' in 'Flat Mode' and will be created as an Object node class.", node_classes_req_res.at(0).exp_node_id.get().ToString());
         node_classes_req_res.at(0).node_class = UA_NodeClass::UA_NODECLASS_OBJECT;
         node_classes_req_res.at(0).result_code = UA_STATUSCODE_GOOD; // Так-как узла не существует в случае режима плоских узлов, то нужно игнорировать эту ошибку, а значит выставить хорошее значение.
     }
 
+    // I create a list of ignored nodes and check the nodes for existence
+    RESET_TIMER(timer_nc);
+    for (const auto& nodes : node_classes_req_res)
+    {
+        // Existence check
+        if (UA_StatusCode_isBad(nodes.result_code))
+        {
+            m_logger.Error("Node '{}' returned a bad result in the node class query: {}", nodes.exp_node_id.get().ToString(), UA_StatusCode_name(nodes.result_code));
+            return StatusResults{StatusResults::Fail, StatusResults::GetNodeClassesFail};
+        }
+
+        // Creating a list of ignored nodes
+        if (m_ignored_nodeclasses.contains(nodes.node_class))
+        {
+            m_ignored_node_ids_by_classes.insert(nodes.exp_node_id);
+        }
+    }
+    GET_TIME_ELAPSED_FMT_FORMAT(timer_nc, m_logger.Info, "Making the lists of the ignored nodes by classes: ", "");
+
     return status;
 }
 
-// todo The method below is very huge and smeared, refactoring to break the method into individual entities, which are more clearly
-//  could describe the process.
-StatusResults NodesetExporterLoop::GetNodesData(
-    const std::pair<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>>& node_ids,
-    const std::pair<size_t, size_t>& node_range,
+inline StatusResults NodesetExporterLoop::GetNodesDataPreparation(
+    const std::vector<UATypesContainer<UA_ExpandedNodeId>>& node_ids,
     const std::vector<IOpen62541::NodeClassesRequestResponse>& node_classes_req_res,
-    std::vector<NodeIntermediateModel>& node_models)
+    std::vector<IOpen62541::NodeAttributesRequestResponse>& nodes_attr_req_res,
+    std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res)
 {
-    // todo Transfer filtration by class classes after receiving classes so as not to receive extra data, and filtering by Neymsums before receiving classes, but
-    //  without unnecessary copies of the nodes.
-    m_logger.Trace("Method called: GetNodesData()");
-
-    // Log a list of nodes for export
-    if (m_logger.IsEnable(LogLevel::Debug))
-    {
-        for (size_t index = node_range.first; index < node_range.second; ++index)
-        {
-            // To avoid constantly executing the loop and ToString before sending it to Debug, check the logging level in advance.
-            m_logger.Debug("GetNodesData beginning. NodeID: {}, class: {}", node_ids.second.at(index).ToString(), static_cast<int>(node_classes_req_res.at(index).node_class));
-        }
-        m_logger.Debug("Total nodes: {}", node_range.second - node_range.first);
-    }
-
-    // Preparing the request and getting node attributes
-    std::vector<IOpen62541::NodeAttributesRequestResponse> nodes_attr_req_res; // NODE ATTRIBUTES  (Attribute Service Set)
-    if (GetNodeAttributes(node_ids.second, node_range, node_classes_req_res, nodes_attr_req_res) == StatusResults::Fail)
+    // Receiving an attribute from the server.
+    if (GetNodeAttributes(node_ids, node_classes_req_res, nodes_attr_req_res) == StatusResults::Fail)
     {
         return StatusResults::Fail;
     }
 
     // Prepare a request and get a list of references for each node
     // todo Is it worth getting references of absolutely all nodes from the selection, or should those that are not currently being processed not be included in the list?
-    std::vector<IOpen62541::NodeReferencesRequestResponse> node_references_req_res; // NODE REFERENCES (View Service Set)
-    if (GetNodeReferences(node_ids.second, node_range, node_references_req_res) == StatusResults::Fail)
+    return GetNodeReferences(node_ids, node_references_req_res);
+}
+
+inline StatusResults NodesetExporterLoop::GetNodesDataFiltering(UA_NodeClass node_class, const UATypesContainer<UA_ExpandedNodeId>& node_id)
+{
+    // Depending on the ns0_custom_nodes_ready_to_work flag, different filters for working with ns=0 nodes are used
+    if (m_external_options.ns0_custom_nodes_ready_to_work)
     {
-        return StatusResults::Fail;
+        // Filtering of nodes that are contained in the list of nodes from the OPC UA standard. I do not add such nodes to the list for unloading.
+        // User nodes ns=0 are passed by the filter.
+        if (m_ns0_opcua_standard_node_ids.contains(node_id))
+        {
+            m_logger.Warning("The node with id {} is IGNORED because this node is part of the standard OPC UA set.", node_id.ToString());
+            return StatusResults::Fail;
+        }
+    }
+    else
+    {
+        // Filtering of all nodes with ns = 0. I do not add such nodes to the list for uploading.
+        if (node_id.GetRef().nodeId.namespaceIndex == 0)
+        {
+            m_logger.Warning("The node with id {} is IGNORED because this node is from the OPC UA namespace", node_id.ToString());
+            return StatusResults::Fail;
+        }
     }
 
+    // Filter: Filtering from creating non-exportable node types by class
+    if (m_ignored_nodeclasses.contains(node_class))
+    {
+        m_logger.Warning("NodeID '{}' is IGNORED because this node has a NODE CLASS '{}' from the ignore list", node_id.ToString(), m_ignored_nodeclasses.at(node_class));
+        return StatusResults::Fail;
+    }
+    return StatusResults::Good;
+}
+
+inline StatusResults NodesetExporterLoop::GetNodesDataReferenceCorrection(UA_NodeClass node_class, IOpen62541::NodeReferencesRequestResponse& node_reference_req_res)
+{
     // Processing references for working with the KepServer server (and similar ones with similar features)
-    if (KepServerRefFix(node_references_req_res) == StatusResults::Fail)
+    if (KepServerRefFix(node_reference_req_res) == StatusResults::Fail)
     {
         return StatusResults::Fail;
     }
 
-
-#pragma region Analyze and package data into a container node_models
-    // Working from the node_id list with offset
-    for (size_t index = node_range.first; index < node_range.second; ++index)
+    // Depending on the mode of the formation of flat lists, filtering of reference removal is processed differently.
+    if (m_external_options.flat_list_of_nodes.is_enable)
     {
-        auto index_from_zero = index - node_range.first;
+        // Filter: 'Remove' all hierarchical references
+        DeleteAllHierarchicalReferences(node_reference_req_res);
+    }
+    else
+    {
+        // Filter: 'Removing' broken references
+        DeleteFailedReferences(node_reference_req_res);
 
-        // Different filters of work with ns=0 nodes are used depending on the flag ns0_custom_nodes_ready_to_work
-        if (m_external_options.ns0_custom_nodes_ready_to_work)
+        // Filter: In nodes of classes of type ReferenceTypes, DataTypes, ObjectTypes, VariableTypes 'Remove' back references other than the HasSubtype type.
+        DeleteNotHasSubtypeReference(node_class, node_reference_req_res);
+    }
+    return StatusResults::Good;
+}
+
+inline auto NodesetExporterLoop::GetNodesDataStartNodeCreation(
+    size_t index,
+    size_t index_from_zero,
+    UA_NodeClass node_class,
+    const UATypesContainer<UA_ExpandedNodeId>& node_ids,
+    std::vector<IOpen62541::NodeAttributesRequestResponse>& nodes_attr_req_res,
+    std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res)
+{
+    HasStartNodeSubtypeDetected has_start_node_subtype_detected = false;
+    StartNodeReverseReferenceCounter start_node_reverse_reference_counter = 0;
+
+    // The function of adding attributes to an artificially created start node
+    if (m_external_options.flat_list_of_nodes.is_enable && m_external_options.flat_list_of_nodes.create_missing_start_node && index == 0)
+    {
+        CreateAttributesForStartNode(nodes_attr_req_res, node_references_req_res);
+    }
+
+    // The function of adding references in all subsequent nodes to an artificially borched start node or an existing node on the main
+    // server as a source that will be like a start.
+    if (m_external_options.flat_list_of_nodes.is_enable && index != 0)
+    {
+        AddCustomRefferenceToNodeID(node_ids, index_from_zero, UA_NS0ID_ORGANIZES, false, node_references_req_res);
+    }
+
+    // The function of processing references of starting nodes.
+    // If the starting node does not have a binding to i=85, then such a node creates a reference to the one indicated in the variable parent_start_node_replacer.
+    if (index == 0)
+    {
+        AddStartNodeIfNotFound(index_from_zero, node_class, node_references_req_res, has_start_node_subtype_detected, start_node_reverse_reference_counter);
+    }
+
+    return std::make_pair(has_start_node_subtype_detected, start_node_reverse_reference_counter);
+}
+
+inline auto NodesetExporterLoop::GetNodesDataParentId(
+    size_t index,
+    UA_NodeClass node_class,
+    const std::pair<HasStartNodeSubtypeDetected, StartNodeReverseReferenceCounter>& start_node_prop,
+    std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res)
+{
+    // Parsing and obtaining ParentID
+    // Get the ParentID from the backlink. The first reverse link found is taken. Does not return the parent if the node is of class TYPE and has no backreference type
+    // UA_NS0ID_HASSUBTYPE.
+    auto t_parent_node_id = GetParentNodeId(index, node_class, node_references_req_res);
+
+    // If the starting node is of type HasSubtype and this type of node does not have any back reference to the main parent of the HasSubtype type (this can happen with starting nodes),
+    // then add such a reference to the base super-type, depending on the class of the node.
+    // I'll check if the main parent of the super-type remains, and if not, then I'll add a parent to the base super-type.
+    if (start_node_prop.first && start_node_prop.second == 0)
+    {
+        t_parent_node_id = GetBaseObjectType(node_class);
+
+        m_logger.Warning("The start Node has a node TYPE class without any HasSubtype reverse reference. Adding a new HasSubtype parent reference {}.", t_parent_node_id->ToString());
+        UATypesContainer<UA_ReferenceDescription> insertion_ref_desc_main(UA_TYPES_REFERENCEDESCRIPTION);
+        insertion_ref_desc_main.GetRef().isForward = false;
+        UA_NodeId_copy(&m_ns0id_hassubtype_node_id, &insertion_ref_desc_main.GetRef().referenceTypeId);
+        UA_NodeId_copy(&t_parent_node_id->GetRef().nodeId, &insertion_ref_desc_main.GetRef().nodeId.nodeId);
+        node_references_req_res.at(index).references.emplace(node_references_req_res.at(index).references.end(), std::move(insertion_ref_desc_main));
+    }
+
+    return t_parent_node_id;
+}
+
+StatusResults NodesetExporterLoop::GetNodesData(
+    const std::vector<UATypesContainer<UA_ExpandedNodeId>>& node_ids,
+    const std::vector<IOpen62541::NodeClassesRequestResponse>& node_classes_req_res,
+    std::vector<NodeIntermediateModel>& node_models)
+{
+    m_logger.Trace("Method called: GetNodesData()");
+
+    // Logging a list of nodes for export
+    if (m_logger.IsEnable(LogLevel::Debug))
+    {
+        for (size_t index = 0; index < node_ids.size(); ++index)
         {
-            // Filtering of the nodes that are contained in the list of nodes from the OPC UA standard. I do not add such nodes to the list for unloading.
-            // User nodes ns=0 are passed by a filter.
-            if (m_ns0_opcua_standard_node_ids.contains(node_ids.second.at(index)))
-            {
-                m_logger.Warning("The node with id {} is IGNORED because this node is part of the standard OPC UA set.", node_ids.second.at(index).ToString());
-                continue;
-            }
+            // To avoid constantly executing the loop and ToString before sending it to Debug, I check the logging level in advance.
+            m_logger.Debug("GetNodesData beginning. NodeID: {}, class: {}", node_ids.at(index).ToString(), static_cast<int>(node_classes_req_res.at(index).node_class));
         }
-        else
+        m_logger.Debug("Total nodes: {}", node_ids.size());
+    }
+
+    std::vector<IOpen62541::NodeAttributesRequestResponse> nodes_attr_req_res; // NODE ATTRIBUTES  (Attribute Service Set)
+    std::vector<IOpen62541::NodeReferencesRequestResponse> node_references_req_res; // NODE REFERENCES (View Service Set)
+
+    // Obtaining the necessary data for further processing.
+    if (GetNodesDataPreparation(node_ids, node_classes_req_res, nodes_attr_req_res, node_references_req_res) == StatusResults::Fail)
+    {
+        return StatusResults::Fail;
+    }
+
+    // Processing, filtering and generating NodeIntermediateModel intermediate data for export.
+    node_models.reserve(node_ids.size());
+    for (size_t index = 0; index < node_ids.size(); ++index)
+    {
+        // Nodes that cannot be processed are eliminated.
+        if (GetNodesDataFiltering(node_classes_req_res.at(index).node_class, node_ids.at(index)) == StatusResults::Fail)
         {
-            // The filtering of all components with ns=0. I do not add such components to the list for unloading.
-            if (node_ids.second.at(index).GetRef().nodeId.namespaceIndex == 0)
-            {
-                m_logger.Warning("The node with id {} is IGNORED because this node is from the OPC UA namespace", node_ids.second.at(index).ToString());
-                continue;
-            }
+            continue; // If such a node is found, we skip it and move on.
         }
 
-        // Filter: filtering from creating non -export types of nodes by classes
-        if (m_ignored_nodeclasses.contains(node_classes_req_res.at(index).node_class))
+        // The node links are being corrected.
+        if (GetNodesDataReferenceCorrection(node_classes_req_res.at(index).node_class, node_references_req_res.at(index)) == StatusResults::Fail)
         {
-            m_logger.Warning(
-                "NodeID '{}' is IGNORED because this node has a NODE CLASS '{}' from the ignore list",
-                node_ids.second.at(index).ToString(),
-                m_ignored_nodeclasses.at(node_classes_req_res.at(index).node_class));
-            continue;
+            return StatusResults::Fail;
         }
 
-        // Depending on the mode of the formation of flat lists, filtering of reference removal is processed differently.
-        if (m_external_options.flat_list_of_nodes.is_enable)
-        {
-            // Filter: 'Remove' all hierarchical references
-            DeleteAllHierarhicalReferences(index_from_zero, node_references_req_res);
-        }
-        else
-        {
-            // Filter: 'Removing' broken references
-            DeleteFailedReferences(index_from_zero, node_references_req_res);
+        // Processing the start node and its links
+        auto start_node_prop = GetNodesDataStartNodeCreation(index, index, node_classes_req_res.at(index).node_class, node_ids.at(0), nodes_attr_req_res, node_references_req_res);
 
-            // Filter: In nodes of classes of type ReferenceTypes, DataTypes, ObjectTypes, VariableTypes 'Remove' back references other than the HasSubtype type.
-            DeleteNotHasSubtypeReference(index_from_zero, node_classes_req_res.at(index).node_class, node_references_req_res);
-        }
+        // Get the parent node
+        auto t_parent_node_id = GetNodesDataParentId(index, node_classes_req_res.at(index).node_class, start_node_prop, node_references_req_res);
 
-#pragma region Processing the start nodes and it references
-        // Process the start node and its references
-        bool has_start_node_subtype_detected = false;
-        uint64_t start_node_reverse_reference_counter = 0;
-
-        // The function of adding attributes to an artificially created start node
-        if (m_external_options.flat_list_of_nodes.is_enable && m_external_options.flat_list_of_nodes.create_missing_start_node && index == 0)
-        {
-            CreateAttributesForStartNode(nodes_attr_req_res, node_references_req_res);
-        }
-
-        // The function of adding references in all subsequent nodes to an artificially borched start node or an existing node on the main
-        // server as a source that will be like a start.
-        if (m_external_options.flat_list_of_nodes.is_enable && index != 0)
-        {
-            AddCustomRefferenceToNodeID(node_ids.second.at(0), index_from_zero, UA_NS0ID_ORGANIZES, false, node_references_req_res);
-        }
-
-        // The function of processing references of starting nodes.
-        // If the starting node does not have a binding to i=85, then such a node creates a reference to the one indicated in the variable parent_start_node_replacer.
-        if (index == 0)
-        {
-            AddStartNodeIfNotFound(index_from_zero, node_classes_req_res.at(index).node_class, node_references_req_res, has_start_node_subtype_detected, start_node_reverse_reference_counter);
-        }
-
-        // Analysis and obtaining PARENTID
-        // Obtaining PARENTID from reverse references. The first detected reverse type reference is taken. He does not return the parent if the type of type is a type and does not have a reverse
-        // reference like UA_ns0id_hassubtype.
-        std::unique_ptr<UATypesContainer<UA_ExpandedNodeId>> t_parent_node_id = GetParentNodeId(index_from_zero, node_classes_req_res.at(index).node_class, node_references_req_res);
-
-        // If the starting node is of type HasSubtype and this type of node does not have any back reference to the main parent of the HasSubtype type (this can happen with starting nodes),
-        // then add such a reference to the base super-type, depending on the class of the node.
-        // I'll check if the main parent of the super-type remains, and if not, then I'll add a parent to the base super-type.
-        if (has_start_node_subtype_detected && start_node_reverse_reference_counter == 0)
-        {
-            t_parent_node_id = GetBaseObjectType(node_classes_req_res.at(index).node_class);
-
-            m_logger.Warning("The start Node has a node TYPE class without any HasSubtype reverse reference. Adding a new HasSubtype parent reference {}.", t_parent_node_id->ToString());
-            UATypesContainer<UA_ReferenceDescription> insertion_ref_desc_main(UA_TYPES_REFERENCEDESCRIPTION);
-            insertion_ref_desc_main.GetRef().isForward = false;
-            UA_NodeId_copy(&m_ns0id_hassubtype_node_id, &insertion_ref_desc_main.GetRef().referenceTypeId);
-            UA_NodeId_copy(&t_parent_node_id->GetRef().nodeId, &insertion_ref_desc_main.GetRef().nodeId.nodeId);
-            node_references_req_res.at(index_from_zero).references.emplace(node_references_req_res.at(index_from_zero).references.end(), std::move(insertion_ref_desc_main));
-        }
-
-        // Filter: Analyze the node to determine if it belongs to the parent of the ignored type. If the parent was not found, then we should not add this node, because according to the hierarchy,
-        // if such a parent refers to some nodes that were previously deleted, which means we should not add child nodes.
+        // Analyze the node to see if it belongs to the parent of the ignored type. If the parent was not found, then we should not add this node,
+        // so as in the hierarchy if such a parent refers to some nodes that were previously deleted, and therefore child nodes
+        // we shouldn't add.
         if (!t_parent_node_id)
         {
-            m_logger.Warning("The node with id {} is IGNORED because this node has a PARENT NODE with wrong NODE CLASS", node_ids.second.at(index).ToString());
+            m_logger.Warning("The node with id {} is IGNORED because this node has a PARENT NODE with wrong NODE CLASS", node_ids.at(index).ToString());
             continue;
         }
-#pragma endregion Processing the start nodes and it references
 
+        // --- Creating an intermediate node model object and filling it with previously received and processed data ---
         m_logger.Debug("Filling NodeIntermediateModel...");
         NodeIntermediateModel nim;
 
         // NodeID
-        nim.SetExpNodeId(node_ids.second.at(index).GetRef()); // Copy (must not change the source)
+        nim.SetExpNodeId(node_ids.at(index).GetRef()); // Копирование (не должен изменять источник)
 
         // ParentNodeID
         if (t_parent_node_id == nullptr)
@@ -775,17 +875,17 @@ StatusResults NodesetExporterLoop::GetNodesData(
         nim.SetParentNodeId(std::move(*t_parent_node_id));
 
         // NodeClass
-        nim.SetNodeClass(node_classes_req_res.at(index).node_class); // Copy
+        nim.SetNodeClass(node_classes_req_res.at(index).node_class); // Копирование
 
         // NodeReferences
-        if (node_references_req_res[index_from_zero].references.empty())
+        if (node_references_req_res.at(index).references.empty())
         {
             throw std::runtime_error("node_references_req_res[index_from_zero].references.empty()");
         }
-        nim.SetNodeReferences(std::move(node_references_req_res.at(index_from_zero).references)); // Перемещение
+        nim.SetNodeReferences(std::move(node_references_req_res.at(index).references)); // Перемещение
 
         // NodeAttributes
-        nim.SetAttributes(std::move(nodes_attr_req_res.at(index_from_zero).attrs)); // Перемещение
+        nim.SetAttributes(std::move(nodes_attr_req_res.at(index).attrs)); // Перемещение
 
         if (m_logger.IsEnable(LogLevel::Debug))
         {
@@ -799,7 +899,6 @@ StatusResults NodesetExporterLoop::GetNodesData(
         m_logger.Debug("Move NodeIntermediateModel into std::vector<NodeIntermediateModel>");
         node_models.emplace_back(std::move(nim));
     }
-#pragma endregion Analysis and packaging of data into the node_models container
 
     m_logger.Debug("-- Total nodes in NodeIntermediateModels: {} --", node_models.size());
 
@@ -823,16 +922,14 @@ std::set<std::reference_wrapper<ExpandedNodeId>, std::less<ExpandedNodeId>> Node
     // DistINCT algorithm with the complexity of n * log (n)
     for (size_t index = 1; index < node_ids.size(); ++index) // сложность n
     {
-        if (!fast_search_nodeid_ref_copy.contains(node_ids.at(index))) // сложность log(n)
-        {
-            after_distinct_node_ids.push_back(node_ids.at(index));
-            fast_search_nodeid_ref_copy.insert(std::ref(after_distinct_node_ids.at(new_index)));
-            ++new_index;
-        }
-        else
+        if (fast_search_nodeid_ref_copy.contains(node_ids.at(index))) // сложность log(n)
         {
             m_logger.Info("The found NodeID duplicate {} has been removed.", node_ids.at(index).ToString());
+            continue;
         }
+        after_distinct_node_ids.push_back(node_ids.at(index));
+        fast_search_nodeid_ref_copy.insert(std::ref(after_distinct_node_ids.at(new_index)));
+        ++new_index;
     }
     // I move the nodes after filtering
     node_ids.swap(after_distinct_node_ids);
@@ -879,6 +976,7 @@ StatusResults NodesetExporterLoop::CheckStartNodesOnNS0()
 
 #pragma endregion Методы получения и формирования данных
 
+#pragma region Data Export Methods
 StatusResults NodesetExporterLoop::ExportNodes(const std::vector<NodeIntermediateModel>& list_of_nodes_data)
 {
     m_logger.Trace("Method called: ExportNodes()");
@@ -930,7 +1028,53 @@ StatusResults NodesetExporterLoop::ExportNodes(const std::vector<NodeIntermediat
     return status_result;
 }
 
-#pragma endregion Data export methods
+StatusResults NodesetExporterLoop::GetNodeDataAndExport(
+    const std::vector<ExpandedNodeId>& list_of_nodes_from_one_start_node,
+    const std::vector<IOpen62541::NodeClassesRequestResponse>& node_classes_req_res,
+    std::map<std::string, UATypesContainer<UA_NodeId>>& aliases)
+{
+    m_logger.Trace("Method called: GetNodeDataAndExport()");
+
+    auto timer_nde = PREPARE_TIMER(m_external_options.is_perf_timer_enable);
+    RESET_TIMER(timer_nde);
+    std::vector<NodeIntermediateModel> node_intermediate_obj;
+    // Получение необходимых данных по узлам
+    if (GetNodesData(list_of_nodes_from_one_start_node, node_classes_req_res, node_intermediate_obj) == StatusResults::Fail)
+    {
+        return StatusResults{StatusResults::Fail, StatusResults::GetNodesDataFail};
+    }
+    GET_TIME_ELAPSED_FMT_FORMAT(timer_nde, m_logger.Info, "GetNodesData operation: ", "");
+
+    // Может быть такое, что в стартовой пачке будет один узел, который отсеется, например - метод, в итоге
+    // node_intermediate_obj может быть пустой, но это не будет ошибкой.
+    if (!node_intermediate_obj.empty())
+    {
+        // Получение данных по псевдонимам типов узлов
+        RESET_TIMER(timer_nde);
+        if (GetAliases(node_intermediate_obj, aliases) == StatusResults::Fail)
+        {
+            return StatusResults{StatusResults::Fail, StatusResults::GetAliasesFail};
+        }
+        GET_TIME_ELAPSED_FMT_FORMAT(timer_nde, m_logger.Info, "GetAliases and merge operation: ", "");
+
+        // Экспорт узлов
+        RESET_TIMER(timer_nde);
+        if (ExportNodes(node_intermediate_obj) == StatusResults::Fail)
+        {
+            return StatusResults{StatusResults::Fail, StatusResults::ExportNodesFail};
+        }
+        GET_TIME_ELAPSED_FMT_FORMAT(timer_nde, m_logger.Info, "ExportNodes operation: ", "");
+    }
+    else
+    {
+        m_logger.Warning("node_intermediate_obj is empty.");
+    }
+    m_logger.Debug("End of node export step in loop");
+    m_logger.Info("Exported nodes for one start node: {}", node_intermediate_obj.size());
+    return StatusResults{StatusResults::Good, StatusResults::No};
+}
+
+#pragma endregion Методы экспорта данных
 
 StatusResults NodesetExporterLoop::StartExport()
 {
@@ -970,14 +1114,15 @@ StatusResults NodesetExporterLoop::StartExport()
     GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "ExportNamespaces operation: ", "");
 
     std::map<std::string, UATypesContainer<UA_NodeId>> aliases;
-    for (auto& list_of_nodes_from_one_start_node : m_node_ids)
+    // Process the list of each starting node.
+    for (auto& [name_of_start_node, list_of_nodes_from_one_start_node] : m_node_ids)
     {
 
 #pragma region Node Filtering - Remove duplicates(all NodeIds are unique) and remove nodes from ns0
         RESET_TIMER(timer);
         // I move the finished copy of the set of nodes for quick search in the field for further actions.
         // For each iteration of the start node - its own set.
-        m_node_ids_set_copy = Distinct(list_of_nodes_from_one_start_node.second);
+        m_node_ids_set_copy = Distinct(list_of_nodes_from_one_start_node);
         GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "Distinct operation: ", "");
 #pragma endregion Node Filtering - Remove duplicates(all NodeIds are unique) and remove nodes from ns0
 
@@ -997,206 +1142,30 @@ StatusResults NodesetExporterLoop::StartExport()
 
         std::vector<IOpen62541::NodeClassesRequestResponse> node_classes_req_res; // NODE CLASSES (Attribute Service Set)
 
-        // todo Consider the option to remove the crushing according to the m_number_of_max_nodes_to_request_data parameter, as I do not take so much memory, and the difficulty of developing
-        // increases.
-        //  To realize crushing only at the level of OPC UA queries.
-        if (list_of_nodes_from_one_start_node.second.size() <= m_number_of_max_nodes_to_request_data
-            || m_number_of_max_nodes_to_request_data == 0) // If the nodes for export are less than the limit per single request
+        RESET_TIMER(timer);
+        // It is necessary to obtain all classes before processing the rest of the data, since filtering of nodes and links is also done by node classes.
+        auto status = GetNodeClasses(list_of_nodes_from_one_start_node, node_classes_req_res);
+        if (status == StatusResults::Fail)
         {
-#pragma region If the nodes for export are less than the limit per single request
-            m_logger.Debug(
-                "StartExport(), the condition worked: list_of_nodes_from_one_start_node.second.size() <= m_number_of_max_nodes_to_request_data || m_number_of_max_nodes_to_request_data == 0");
-            std::vector<NodeIntermediateModel> node_intermediate_obj = std::vector<NodeIntermediateModel>();
-            std::pair<size_t, size_t> range{0, list_of_nodes_from_one_start_node.second.size()}; // Full range of nodes
-
-            RESET_TIMER(timer);
-            // Get node classes
-            if (GetNodeClasses(list_of_nodes_from_one_start_node.second, range, node_classes_req_res) == StatusResults::Fail)
-            {
-                return StatusResults{StatusResults::Fail, StatusResults::GetNodeClassesFail};
-            }
-            GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "GetNodeClasses operation: ", "");
-
-            if (list_of_nodes_from_one_start_node.second.size() != node_classes_req_res.size())
-            {
-                throw std::runtime_error("list_of_nodes_from_one_start_node.second.size() != node_classes_req_res.size()");
-            }
-
-            RESET_TIMER(timer);
-            // Create a list of ignored nodes
-            for (const auto& nodes : node_classes_req_res)
-            {
-                // Проверка на существование
-                if (UA_StatusCode_isBad(nodes.result_code))
-                {
-                    m_logger.Error("Node '{}' returned a bad result in the node class query: {}", nodes.exp_node_id.ToString(), UA_StatusCode_name(nodes.result_code));
-                    return StatusResults::Fail;
-                }
-
-                // Create a list of ignored nodes
-                if (m_ignored_nodeclasses.contains(nodes.node_class))
-                {
-                    m_ignored_node_ids_by_classes.insert(nodes.exp_node_id);
-                }
-            }
-            GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "Making the lists of the ignored nodes by classes: ", "");
-
-            RESET_TIMER(timer);
-            // Получение необходимых данных по узлам
-            if (GetNodesData(list_of_nodes_from_one_start_node, range, node_classes_req_res, node_intermediate_obj) == StatusResults::Fail)
-            {
-                return StatusResults{StatusResults::Fail, StatusResults::GetNodesDataFail};
-            }
-            GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "GetNodesData operation: ", "");
-
-            // It may be that in the starting pack there will be one knot, which is eliminated, for example, a method, in the end
-            // node_Intermediate_obj can be empty, but it will not be a mistake.
-            if (node_intermediate_obj.empty())
-            {
-                m_logger.Debug("node_intermediate_obj is empty.");
-                continue;
-            }
-
-            RESET_TIMER(timer);
-            // Retrieving data by aliases of node types
-            if (GetAliases(node_intermediate_obj, aliases) == StatusResults::Fail)
-            {
-                return {StatusResults::Fail, StatusResults::SubStatus::GetAliasesFail};
-            }
-            GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "GetAliases operation: ", "");
-
-            RESET_TIMER(timer);
-            // Exporting Nodes
-            if (ExportNodes(node_intermediate_obj) == StatusResults::Fail)
-            {
-                return {StatusResults::Fail, StatusResults::SubStatus::ExportNodesFail};
-            }
-            GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "ExportNodes operation: ", "");
-#pragma endregion If the nodes for export are less than the limit per single request
+            return status;
         }
-        else // If there are more nodes for export than the limit for a single request
+        GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "get_node_classes operation: ", "");
+
+        if (list_of_nodes_from_one_start_node.size() != node_classes_req_res.size())
         {
-#pragma region If the export nodes are larger than the limit for a single request
-            m_logger.Debug("StartExport(), the condition worked: list_of_nodes_from_one_start_node.second.size() > m_number_of_max_nodes_to_request_data");
-
-            // A local function that allows you to provide an algorithm for batch processing of data by working with ranges.
-            // This function is used to run various routines where you need to work with NodeID, but with a certain number in one cycle.
-            const auto func_in_nodes_loop =
-                [&list_of_nodes_from_one_start_node, number_of_max_nodes_to_request_data = m_number_of_max_nodes_to_request_data](const std::function<StatusResults(std::pair<size_t, size_t>&)>& func)
-            {
-                std::pair<size_t, size_t> node_range;
-                size_t number_of_nodes_per_request = 0;
-                for (size_t index = 0; index < list_of_nodes_from_one_start_node.second.size(); index += number_of_nodes_per_request)
-                {
-                    number_of_nodes_per_request = list_of_nodes_from_one_start_node.second.size() - index >= number_of_max_nodes_to_request_data
-                                                      ? number_of_max_nodes_to_request_data
-                                                      : list_of_nodes_from_one_start_node.second.size() - index;
-                    node_range.first = index;
-                    node_range.second = node_range.first + number_of_nodes_per_request;
-
-                    auto status = func(node_range);
-                    if (status == StatusResults::Fail)
-                    {
-                        return status;
-                    }
-                };
-                return StatusResults{StatusResults::Good, StatusResults::No};
-            };
-
-            // Batch retrieval of all node classes.
-            const auto get_node_classes = [this, &list_of_nodes_from_one_start_node, &node_classes_req_res](const std::pair<size_t, size_t>& node_range)
-            {
-                auto timer = PREPARE_TIMER(m_external_options.is_perf_timer_enable);
-                std::vector<IOpen62541::NodeClassesRequestResponse> part_of_node_classes_req_res;
-                if (GetNodeClasses(list_of_nodes_from_one_start_node.second, node_range, part_of_node_classes_req_res) == StatusResults::Fail)
-                {
-                    return StatusResults::Fail;
-                }
-                GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "GetNodeClasses operation: ", "");
-
-                // Creating a list of ignored nodes
-                RESET_TIMER(timer);
-                for (const auto& nodes : part_of_node_classes_req_res)
-                {
-                    if (m_ignored_nodeclasses.contains(nodes.node_class))
-                    {
-                        m_ignored_node_ids_by_classes.insert(nodes.exp_node_id);
-                    }
-                }
-                GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "Making the lists of the ignored nodes by classes: ", "");
-                std::move(part_of_node_classes_req_res.begin(), part_of_node_classes_req_res.end(), std::back_inserter(node_classes_req_res));
-                return StatusResults::Good;
-            };
-
-            // Batch retrieval of all other data and export
-            const auto get_node_data_and_export = [this, &list_of_nodes_from_one_start_node, &node_classes_req_res, &aliases](const std::pair<size_t, size_t>& node_range)
-            {
-                auto timer = PREPARE_TIMER(m_external_options.is_perf_timer_enable);
-                RESET_TIMER(timer);
-                std::vector<NodeIntermediateModel> node_intermediate_obj;
-                // Getting the data you need on the nodes
-                if (GetNodesData(list_of_nodes_from_one_start_node, node_range, node_classes_req_res, node_intermediate_obj) == StatusResults::Fail)
-                {
-                    return StatusResults{StatusResults::Fail, StatusResults::GetNodesDataFail};
-                }
-                GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "GetNodesData operation: ", "");
-
-                // It may be that in the starting pack there will be one knot, which is eliminated, for example, a method, in the end
-                // node_Intermediate_obj can be empty, but it will not be a mistake.
-                if (!node_intermediate_obj.empty())
-                {
-                    // Retrieving Node Type Aliases
-                    RESET_TIMER(timer);
-                    if (GetAliases(node_intermediate_obj, aliases) == StatusResults::Fail)
-                    {
-                        return StatusResults{StatusResults::Fail, StatusResults::GetAliasesFail};
-                    }
-                    GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "GetAliases and merge operation: ", "");
-
-                    // Exporting Nodes
-                    RESET_TIMER(timer);
-                    if (ExportNodes(node_intermediate_obj) == StatusResults::Fail)
-                    {
-                        return StatusResults{StatusResults::Fail, StatusResults::ExportNodesFail};
-                    }
-                    GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "ExportNodes operation: ", "");
-                }
-                else
-                {
-                    m_logger.Warning("node_intermediate_obj is empty.");
-                }
-                m_logger.Debug("End of node export step in loop");
-                m_logger.Info("Part of exported nodes: {}", node_intermediate_obj.size());
-                return StatusResults{StatusResults::Good, StatusResults::No};
-            };
-
-            //---------------- ACTION ----------------
-
-            RESET_TIMER(timer);
-            // You need to get all the classes before you start processing the rest of the data, because you filter nodes and references by node classes in the same way.
-            if (func_in_nodes_loop(get_node_classes) == StatusResults::Fail)
-            {
-                return StatusResults{StatusResults::Fail, StatusResults::GetNodeClassesFail};
-            }
-            GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "get_node_classes operation: ", "");
-
-            if (list_of_nodes_from_one_start_node.second.size() != node_classes_req_res.size())
-            {
-                throw std::runtime_error("list_of_nodes_from_one_start_node.second.size() != node_classes_req_res.size()");
-            }
-
-            // IMPORTANT: Since node classes are also index-bound, but all classes have already been obtained in advance,
-            // it is necessary to synchronize the indexes of the classes and other structures of index-dependent nodes!
-            // Batch retrieval of all other data and export.
-            RESET_TIMER(timer);
-            const auto status = func_in_nodes_loop(get_node_data_and_export);
-            if (status == StatusResults::Fail)
-            {
-                return status;
-            }
-            GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "get_node_data_and_export operations: ", "");
-#pragma endregion If the export nodes are larger than the limit for a single request
+            throw std::runtime_error("list_of_nodes_from_one_start_node.second.size() != node_classes_req_res.size()");
         }
+
+        // IMPORTANT: Since node classes are also index-bound, but all classes have already been obtained in advance,
+        // it is necessary to synchronize the indexes of the classes and other structures of index-dependent nodes!
+        // Batch retrieval of all other data and export.
+        RESET_TIMER(timer);
+        status = GetNodeDataAndExport(list_of_nodes_from_one_start_node, node_classes_req_res, aliases);
+        if (status == StatusResults::Fail)
+        {
+            return status;
+        }
+        GET_TIME_ELAPSED_FMT_FORMAT(timer, m_logger.Info, "get_node_data_and_export operations: ", "");
     }
 
     if (!aliases.empty())
@@ -1239,9 +1208,15 @@ const std::map<UATypesContainer<UA_NodeId>, std::string> NodesetExporterLoop::m_
     CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_HASCOMPONENT),
     CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_HASNOTIFIER),
     CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_HASORDEREDCOMPONENT),
-    CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_ALARMGROUPMEMBER),
+    CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_CONTROLS),
     CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_DATASETTOWRITER),
-    CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_AGGREGATES)};
+    CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_AGGREGATES),
+    CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_HASREFERENCEDESCRIPTION),
+    CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_HASLOWERLAYERINTERFACE),
+    CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_HASPUSHEDSECURITYGROUP),
+    CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_ALARMGROUPMEMBER),
+    CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_ALARMSUPPRESSIONGROUPMEMBER),
+    CONSTRUCT_NUMERIC_NODE_ID_MAP_ITEM(UA_NS0ID_REQUIRES)};
 
 const std::map<std::uint32_t, std::string> NodesetExporterLoop::m_types_nodeclasses{
     CONSTRUCT_MAP_ITEM(UA_NODECLASS_OBJECTTYPE),

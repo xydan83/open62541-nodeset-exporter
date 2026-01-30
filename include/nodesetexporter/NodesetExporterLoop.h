@@ -22,9 +22,11 @@
 #include <open62541/types.h>
 #include <open62541/types_generated_handling.h>
 
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
+#include <type_traits>
 #include <variant>
 
 namespace nodesetexporter
@@ -37,10 +39,12 @@ using LogLevel = nodesetexporter::common::LogLevel;
 using IEncoder = ::nodesetexporter::interfaces::IEncoder;
 using IOpen62541 = ::nodesetexporter::interfaces::IOpen62541;
 using NodeIntermediateModel = ::nodesetexporter::open62541::NodeIntermediateModel;
-using StatusResults = nodesetexporter::common::statuses::StatusResults<int64_t>;
+using StatusResults = nodesetexporter::common::statuses::StatusResults<>;
 using ::nodesetexporter::open62541::UATypesContainer;
 using ::nodesetexporter::open62541::typealiases::VariantsOfAttr;
 using ExpandedNodeId = nodesetexporter::open62541::UATypesContainer<UA_ExpandedNodeId>;
+using HasStartNodeSubtypeDetected = bool;
+using StartNodeReverseReferenceCounter = uint64_t;
 
 #pragma endregion Using_declarations_to_some_types
 
@@ -96,14 +100,13 @@ private:
 #pragma region Getting ID attribute
     /**
      * @brief Prepare a request and get all the necessary node attributes.
-     * @param range_for_nodes The range of operation within the list of nodes node_ids and node_classes_req_res. Used for batch requests.
+     * @param node_range The range of operation within the list of nodes node_ids and node_classes_req_res. Used for batch requests.
      * @param node_classes_req_res List of structures containing the node class.
      * @param nodes_attr_req_res [out] List of attributes bound to their NodeID.
      * @return Request execution status.
      */
     [[nodiscard]] StatusResults GetNodeAttributes(
         const std::vector<UATypesContainer<UA_ExpandedNodeId>>& node_ids,
-        const std::pair<size_t, size_t>& node_range,
         const std::vector<IOpen62541::NodeClassesRequestResponse>& node_classes_req_res,
         std::vector<IOpen62541::NodeAttributesRequestResponse>& nodes_attr_req_res);
 
@@ -195,51 +198,81 @@ private:
         return std::map<UA_AttributeId, std::optional<VariantsOfAttr>>{{UA_ATTRIBUTEID_DATATYPEDEFINITION, std::nullopt}, {UA_ATTRIBUTEID_ISABSTRACT, std::nullopt}};
     }
 
-    // todo Do I need to add support for View attribute query?
-#pragma endregion Retrieving the ID attribute
+// todo Do I need to add support for View attribute query?
+#pragma endregion Получение ID атрибут
 
-#pragma region Retrieving and Processing Links
+#pragma region Получение и обработка ссылок
 
     /**
-     * @brief Prepare a query and get a list of references for each node.
+     * @brief Prepare a query and get a list of links for each node.
      * @param node_ids List of NodeIds of nodes that participate in the export.
-     * @param range_for_nodes The range of operation within the list of nodes node_ids and node_classes_req_res. Used for batch requests.
+     * @param node_range The range of operation within the list of nodes node_ids and node_classes_req_res. Used for batch requests.
      * @param node_references_req_res List of references associated with NodeID.
      * @return Request execution status.
      */
-    [[nodiscard]] StatusResults GetNodeReferences(
-        const std::vector<UATypesContainer<UA_ExpandedNodeId>>& node_ids,
-        const std::pair<size_t, size_t>& node_range,
-        std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res);
+    [[nodiscard]] StatusResults GetNodeReferences(const std::vector<UATypesContainer<UA_ExpandedNodeId>>& node_ids, std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res);
 
     /**
-     * @brief Method for processing references for working with the KepServer server (and similar ones with similar features)
-     * @param node_references_req_res List of references associated with NodeID.
+     * @brief Method for adjusting links of type HasTypeDefinition. Forces direct directionality (in general, links have no direction
+     * but the basic direction can be represented as a straight line by default) if the opposite direction is encountered, and also removes unnecessary links in case
+     * if the principle of one link of this type per node is violated.
+     * @param ref_desc_arr
+     */
+    void CorrectionUnnecessaryHasTypeDefinitionReferences(std::vector<UATypesContainer<UA_ReferenceDescription>>& ref_desc_arr);
+
+    /**
+     * @brief Checks for the presence of the first backlink found in the node and returns the result of the presence of such a link.
+     * @param ref_desc_arr ref data description object
+     * @return true - if at least one link is found, otherwise false.
+     */
+    [[nodiscard]] bool HasReverseReference(const std::vector<UATypesContainer<UA_ReferenceDescription>>& ref_desc_arr);
+
+    /**
+     * @brief For unknown reasons, KepServer sets Variable class nodes to HasTypeDefinition = BaseVariableType(62).
+     * This abstract type cannot be used directly on nodes of this class. When importing nodesetloader we get
+     * error. In this case, the easiest option is to change HasTypeDefinition to a more specific one, although still generic, but
+     * non-abstract type BaseDataVariableType(63).
+     * @param ref_desc_arr ref data description object
+     * @return true - if HasTypeDefinition = BaseVariableType(62) was found and replaced with BaseDataVariableType(63) otherwise false.
+     */
+    [[maybe_unused]] bool ReplaceBaseVariableType(const UATypesContainer<UA_ExpandedNodeId>& node_id, std::vector<UATypesContainer<UA_ReferenceDescription>>& ref_desc_arr);
+
+    /**
+     * @brief Algorithm for adding backlinks from text node identifiers.
+     * The algorithm does not use deep analysis to identify link types. All ReferenceTypes will be of type HasComponent.
+     * There is also no solution for analyzing the namespace in case the parent and child may have different namespaces.
+     * @param node_id The node in whose links backlinks are supposed to be added.
+     * @param ref_desc_arr ref data description object
+     * @return true if links have been added, false if the node id type is not string.
+     */
+    [[maybe_unused]] bool AddNodeReverseReference(const UATypesContainer<UA_ExpandedNodeId>& node_id, std::vector<UATypesContainer<UA_ReferenceDescription>>& ref_desc_arr);
+
+    /**
+     * @brief Method for processing links for working with the KepServer server (and similar ones with similar features)
+     * @param node_reference_req_res References bound to NodeID.
      * @return Request execution status.
      */
-    [[nodiscard]] StatusResults KepServerRefFix(std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res);
+    [[nodiscard]] StatusResults KepServerRefFix(IOpen62541::NodeReferencesRequestResponse& node_reference_req_res);
 
     /**
-     * @brief Remove references to ignored, known nodes.
-     * @param index The index of the node associated with the references.
-     * @param node_references_req_res List of references associated with NodeID.
+     * @brief Удалить ссылки на игнорируемые известные узлы.
+     * @param index Индекс узла, связанного со ссылками.
+     * @param node_references_req_res Список ссылок, связанных с NodeID.
      */
-    void DeleteFailedReferences(size_t node_index, std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res);
+    void DeleteFailedReferences(IOpen62541::NodeReferencesRequestResponse& node_reference_req_res);
 
     /**
-     * @brief Removing all hierarchical links in the node.
-     * @param index Index associated with the links of the node.
-     * @param node_references_req_res List of links tied to nodeid.
+     * @brief Remove all hierarchical links in a node.
+     * @param node_references_req_res References bound to NodeID.
      */
-    void DeleteAllHierarhicalReferences(size_t node_index, std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res);
+    void DeleteAllHierarchicalReferences(IOpen62541::NodeReferencesRequestResponse& node_reference_req_res);
 
     /**
      * @brief Removing back references in nodes of classes of types ReferenceTypes, DataTypes, ObjectTypes, VariableTypes other than HasSubtype.
-     * @param node_index The index of the node associated with the references.
-     * @param node_class The class of the node associated with the references.
-     * @param node_references_req_res List of references associated with NodeID.
+     * @param node_class The class of the node associated with the links.
+     * @param node_references_req_res References bound to NodeID.
      */
-    void DeleteNotHasSubtypeReference(size_t node_index, UA_NodeClass node_class, std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res);
+    void DeleteNotHasSubtypeReference(UA_NodeClass node_class, IOpen62541::NodeReferencesRequestResponse& node_reference_req_res);
 
     /**
      * @brief Method for setting the start node.
@@ -318,34 +351,97 @@ private:
 
     /**
      * @brief Method for getting node classes by NodeID.
-     * @param node_ids List of NodeIds of nodes that participate in the export.
-     * @param range_for_nodes The range of operation within the list of nodes node_ids. Used for batch requests.
-     * @param node_classes_req_res [out] List of structures containing the node class.
+     * @param list_of_nodes_from_one_start_node An array of NodeIDs from one start node.
+     * @param node_classes_req_res [out] An array of NodeClassesRequestResponse structures filled by the function containing references to NodeID and node classes.
      * @return Request execution status.
      */
     [[nodiscard]] StatusResults GetNodeClasses(
-        const std::vector<UATypesContainer<UA_ExpandedNodeId>>& node_ids,
-        const std::pair<size_t, size_t>& node_range,
+        const std::vector<UATypesContainer<UA_ExpandedNodeId>>& list_of_nodes_from_one_start_node,
         std::vector<IOpen62541::NodeClassesRequestResponse>& node_classes_req_res);
 
     /**
-     * @brief The main method for obtaining the necessary data to generate a list of intermediate structures describing the main parameters of a node and its attributes.
-     * @remark node_ids is a synchronizer for all arrays of structures based on NodeID as a sequence of elements.
-     *         The basic rule is that any request for nodes in a certain sequence and number of nodes must be equal to the number and the same sequence of responses.
-     *         This rule is used in the OPC UA standard when receiving a response from a server where the main parameter is a set of nodes.
-     *         For example: "The size and order of the list matches the size and order of the nodesToBrowsespecified in the request (Browsing)",
-     *         https://reference.opcfoundation.org/Core/Part4/v104/docs/5.8.2.2
-     *         or: "The size and order of this list matches the size and order of the nodesToReadrequest parameter (Read)".
-     *         https://reference.opcfoundation.org/Core/Part4/v104/docs/5.10.2.2
+     * @brief Receive the necessary node data for further processing.
      * @param node_ids List of NodeIds of nodes that participate in the export.
-     * @param range_for_nodes The range of operation within the list of nodes node_ids and node_classes_req_res. Used for batch requests.
+     * @param node_classes_req_res List of structures containing the node class.
+     * @param nodes_attr_req_res List of attributes bound to their NodeID.
+     * @param node_references_req_res List of references associated with NodeID.
+     * @return Request execution status.
+     */
+    StatusResults GetNodesDataPreparation(
+        const std::vector<UATypesContainer<UA_ExpandedNodeId>>& node_ids,
+        const std::vector<IOpen62541::NodeClassesRequestResponse>& node_classes_req_res,
+        std::vector<IOpen62541::NodeAttributesRequestResponse>& nodes_attr_req_res,
+        std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res);
+
+    /**
+     * @brief A method that combines various node filtering methods for access to further processing.
+     * @param node_class The node class.
+     * @param node_id The node to be checked by the filters.
+     * @return The result of the filter. In case of Fail, the node is not suitable for further processing.
+     */
+    StatusResults GetNodesDataFiltering(UA_NodeClass node_class, const UATypesContainer<UA_ExpandedNodeId>& node_id);
+
+    /**
+     * @brief Method for updating links of the node being processed.
+     * @param node_class The node class.
+     * @param node_reference_req_res References bound to NodeID.
+     * @return Processing status.
+     */
+    StatusResults GetNodesDataReferenceCorrection(UA_NodeClass node_class, IOpen62541::NodeReferencesRequestResponse& node_reference_req_res);
+
+    /**
+     * @brief Method for creating an artificial start node and its minimum required links.
+     * @param index Index of the node associated with the links (with offset)
+     * @param index_from_zero The index of the node associated with the links. (from scratch)
+     * @param node_class The node class.
+     * @param node_ids Start node ID.
+     * @param nodes_attr_req_res List of attributes bound to their NodeID.
+     * @param node_references_req_res List of references associated with NodeID.
+     * @return Returns a tuple of two variables (START NODE ONLY). In the case of a non-start node, the return data should be ignored.
+     * 1.HasStartNodeSubtypeDetected - If the starting node is the TYPES node class, it is marked as true. Otherwise false.
+     * 2.StartNodeReverseReferenceCounter - counters whether a node has backlinks and their number.
+     */
+    auto GetNodesDataStartNodeCreation(
+        size_t index,
+        size_t index_from_zero,
+        UA_NodeClass node_class,
+        const UATypesContainer<UA_ExpandedNodeId>& node_ids,
+        std::vector<IOpen62541::NodeAttributesRequestResponse>& nodes_attr_req_res,
+        std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res);
+
+    /**
+     * @brief Method for getting the ID of the parent node.
+     * @param index The index of the node from the list of export nodes whose parent node should be retrieved.
+     * @param node_class The node class.
+     * @param start_node_prop Tuple of two variables {HasStartNodeSubtypeDetected, StartNodeReverseReferenceCounter} (FOR START NODE ONLY).
+     * see return from GetNodesDataStartNodeCreation method.
+     * @param node_references_req_res List of references associated with NodeID.
+     * @return A NodeID object with the primary parent node of the node specified by index.
+     */
+    auto GetNodesDataParentId(
+        size_t index,
+        UA_NodeClass node_class,
+        const std::pair<HasStartNodeSubtypeDetected, StartNodeReverseReferenceCounter>& start_node_prop,
+        std::vector<IOpen62541::NodeReferencesRequestResponse>& node_references_req_res);
+
+    /**
+     * @brief The main method for obtaining the necessary data to generate a list of intermediate structures
+     * describing the main parameters of the node and its attributes.
+     * @remark node_ids is a synchronizer for all arrays of structures based on NodeID as a sequence of elements.
+     * The basic rule is that any request for nodes in a certain sequence and number of nodes must be equal to the number and the same sequence of responses.
+     * This rule is used in the OPC UA standard when receiving a response from a server where the main parameter is a set of nodes.
+     * For example: "The size and order of the list matches the size and order of the nodesToBrowsespecified in the request (Browsing)",
+     * https://reference.opcfoundation.org/Core/Part4/v104/docs/5.8.2.2
+     * or: "The size and order of this list matches the size and order of the nodesToReadrequest parameter (Read)".
+     * https://reference.opcfoundation.org/Core/Part4/v104/docs/5.10.2.2
+     * @param node_ids A list of NodeIds of nodes that participate in the export, where the first parameter is the starting or root node of the list in text form, the second parameter is a list of
+     * nodes including the start or root node in the form of an object that is the first node in the list.
      * @param node_classes_req_res List of structures containing the node class.
      * @param node_models [out] List of intermediate structures describing the main parameters of nodes and their attributes.
      * @return Request execution status.
      */
     [[nodiscard]] StatusResults GetNodesData(
-        const std::pair<std::string, std::vector<UATypesContainer<UA_ExpandedNodeId>>>& node_ids,
-        const std::pair<size_t, size_t>& node_range,
+        const std::vector<UATypesContainer<UA_ExpandedNodeId>>& node_ids,
         const std::vector<IOpen62541::NodeClassesRequestResponse>& node_classes_req_res,
         std::vector<NodeIntermediateModel>& node_models);
 
@@ -441,6 +537,19 @@ private:
     // todo Add a text description of the DataType and ReferenceType to the NodeIntermediateModel.
     [[nodiscard]] StatusResults ExportNodes(const std::vector<NodeIntermediateModel>& list_of_nodes_data);
 
+    /**
+     * @brief Retrieve all other data in batches and export
+     * @param list_of_nodes_from_one_start_node An array of NodeIDs from one start node.
+     * @param node_range The range of batch data processing per function call.
+     * @param node_classes_req_res An array of NodeClassesRequestResponse structures containing references to NodeID and node classes.
+     * @param aliases Return associative array of text aliases relative to their NodeID.
+     * @return The execution status of the method.
+     */
+    [[nodiscard]] StatusResults GetNodeDataAndExport(
+        const std::vector<ExpandedNodeId>& list_of_nodes_from_one_start_node,
+        const std::vector<IOpen62541::NodeClassesRequestResponse>& node_classes_req_res,
+        std::map<std::string, UATypesContainer<UA_NodeId>>& aliases);
+
 #pragma endregion Data Export Methods
 public:
     /**
@@ -481,17 +590,11 @@ public:
             m_ignored_nodeclasses.insert(std::pair(UA_NODECLASS_DATATYPE, "UA_NODECLASS_DATATYPE"));
         }
     }
-
-    /**
-     * @brief Sets the maximum number of nodes for which you need to get data from the server for one request.
-     *        Also affects how much data on nodes will be stored in memory (except XML nodes).
-     * @param number
-     */
-    void SetNumberOfMaxNodesToRequestData(u_int32_t number)
-    {
-        m_logger.Trace("Method called: SetNumberOfMaxNodesToRequestData()");
-        m_number_of_max_nodes_to_request_data = number;
-    }
+    ~NodesetExporterLoop() = default;
+    NodesetExporterLoop(NodesetExporterLoop const&) noexcept = delete;
+    NodesetExporterLoop& operator=(NodesetExporterLoop const&) = delete;
+    NodesetExporterLoop(NodesetExporterLoop&&) noexcept = delete;
+    NodesetExporterLoop& operator=(NodesetExporterLoop&&) = delete;
 
     /**
      * @brief Method to start a chain by exporting nodes of their accompanying data.
@@ -503,6 +606,7 @@ public:
 
 private:
     std::map<std::string, std::vector<ExpandedNodeId>> m_node_ids;
+    std::vector<UATypesContainer<UA_ReferenceDescription>> m_filtered_references_tmp; // Массив для фильтрации ссылок
     LoggerBase& m_logger;
     IOpen62541& m_open62541_lib;
     IEncoder& m_export_encoder;
@@ -569,7 +673,7 @@ private:
         {
             return object_nodes + variable_nodes + objecttype_nodes + variabletype_nodes + referencetype_nodes + datatype_nodes + method_nodes + view_nodes;
         }
-    } m_exported_nodes = {0};
+    } m_exported_nodes = {.object_nodes = 0};
 };
 
 } // namespace nodesetexporter

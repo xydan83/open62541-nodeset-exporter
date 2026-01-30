@@ -21,13 +21,22 @@ namespace nodesetexporter::common
  */
 [[nodiscard]] static inline std::string UaStringToStdString(const UA_String& some_string)
 {
-    return std::string{static_cast<char*>(static_cast<void*>(some_string.data)), some_string.length};
+    return std::string{static_cast<char*>(static_cast<void*>(some_string.data)), some_string.length}; // NOLINT(bugprone-casting-through-void)
 }
 
 /**
  * @brief Function Eliminating the UANodeID facility identifier and a line returns.
  */
-[[nodiscard]] std::string UaGuidIdentifierToStdString(const UA_NodeId& node_id);
+[[nodiscard]] std::string UaIdIdentifierToStdString(const UA_NodeId& node_id);
+
+#ifdef OPEN62541_VER_1_3
+// NOLINTBEGIN
+// From version 1.4.x
+// C style
+UA_Boolean UA_String_isEmpty(const UA_String* str);
+
+// NOLINTEND
+#endif
 
 } // namespace nodesetexporter::common
 

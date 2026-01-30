@@ -9,7 +9,10 @@
 #ifndef NODESETEXPORTER_COMMON_DATETIME_H
 #define NODESETEXPORTER_COMMON_DATETIME_H
 
+#include <open62541/types.h> //NOLINT(misc-header-include-cycle)
+
 #include <chrono>
+#include <string>
 
 namespace nodesetexporter::common
 {
@@ -59,6 +62,19 @@ public:
      * @return Date and time in text format.
      */
     static std::string GetTimeLocalToString(time_t time, const std::string& format = "%c");
+
+    /**
+     * @brief Method for converting UA_DateTime date/time object data to a string
+     * format: -yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'
+     * @return String representation of the date/time.
+     */
+    static std::string UADateTimeToString(UA_DateTime date_time);
+
+private:
+    /**
+     * @brief Method for encoding date/time characters into an ANSI character string.
+     */
+    static uint8_t XmlEncodePrintNumber(int32_t n, char* pos, uint8_t min_digits);
 };
 
 } // namespace nodesetexporter::common

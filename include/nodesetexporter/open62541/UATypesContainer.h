@@ -27,6 +27,8 @@ template <typename TOpen62541Type = std::nullptr_t>
 class UATypesContainer final
 {
 public:
+    using Type = TOpen62541Type;
+
     UATypesContainer() = delete;
 
     /**
@@ -36,6 +38,7 @@ public:
     explicit UATypesContainer(u_int32_t ua_type)
         : m_ua_object(static_cast<TOpen62541Type*>(UA_new(&UA_TYPES[ua_type]))) // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
         , m_ua_type(ua_type)
+        , m_is_empty_object(true)
     {
         UA_init(m_ua_object, &UA_TYPES[ua_type]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
     };
@@ -63,13 +66,13 @@ public:
     explicit UATypesContainer(TOpen62541Type* const ua_type_obj, u_int32_t ua_type)
         : m_ua_type(ua_type)
         , m_ua_object(ua_type_obj)
-        , m_is_weak_copy(true)
+        , m_is_weak_ref(true)
     {
     }
 
     ~UATypesContainer()
     {
-        if (m_ua_object != nullptr && !m_is_weak_copy)
+        if (m_ua_object != nullptr && !m_is_weak_ref)
         {
             UA_delete(m_ua_object, &UA_TYPES[m_ua_type]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
         }
@@ -175,8 +178,13 @@ public:
 #ifdef OPEN62541_UAPRINT_WITH_QUOTES
         // Since in the Open62541 library some JSON elements began to be framed in quotes, for compatibility
         // I will remove them if the definition is activated.
-        return std::string{static_cast<char*>(static_cast<void*>(out->data)), out->length}.substr(1, out->length - 2);
+        return std::string{static_cast<char*>(static_cast<void*>(out->data)), out->length}.substr(1, out->length - 2); // NOLINT(bugprone-casting-through-void)
 #else
+        // Fix for 1.3.x versions with quotation marks for UA_String.
+        if(m_ua_type == UA_TYPES_STRING)
+        {
+            return std::string{static_cast<char*>(static_cast<void*>(out->data)), out->length}.substr(1, out->length - 2); // NOLINT(bugprone-casting-through-void)
+        }
         return std::string{static_cast<char*>(static_cast<void*>(out->data)), out->length};
 #endif
     }
@@ -186,10 +194,12 @@ public:
      * Example: 'ns=2;s=MyTemperature'
      */
     template <typename T = TOpen62541Type>
-    typename std::enable_if<std::is_same_v<T, UA_NodeId>>::type SetParamFromString(const std::string& node_id)
+    void SetParamFromString(std::string_view node_id)
+        requires(std::is_same_v<T, UA_NodeId>)
     {
         ClearNodeIDObject();
         UA_NodeId_parse(m_ua_object, UA_STRING(const_cast<char*>(node_id.data()))); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+        m_is_empty_object = false;
     }
 
     /**
@@ -197,10 +207,13 @@ public:
      * Example: 'ns=2;s=MyTemperature'
      */
     template <typename T = TOpen62541Type>
-    typename std::enable_if<std::is_same_v<T, UA_NodeId>>::type SetParamFromString(std::string&& node_id)
+    void SetParamFromString(std::string&& node_id)
+        requires(std::is_same_v<T, UA_NodeId>)
     {
         ClearNodeIDObject();
-        UA_NodeId_parse(m_ua_object, UA_STRING(node_id.data()));
+        auto node_id_tmp = std::move(node_id);
+        UA_NodeId_parse(m_ua_object, UA_STRING(node_id_tmp.data()));
+        m_is_empty_object = false;
     }
 
     /**
@@ -208,10 +221,12 @@ public:
      * Example: 'ns=2;s=MyTemperature', 'nsu=http://test.org/UA/Data/;s=some.node.id'
      */
     template <typename T = TOpen62541Type>
-    typename std::enable_if<std::is_same_v<T, UA_ExpandedNodeId>>::type SetParamFromString(const std::string& exp_node_id)
+    void SetParamFromString(std::string_view exp_node_id)
+        requires(std::is_same_v<T, UA_ExpandedNodeId>)
     {
         ClearNodeIDObject();
         UA_ExpandedNodeId_parse(m_ua_object, UA_STRING(const_cast<char*>(exp_node_id.data()))); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+        m_is_empty_object = false;
     }
 
     /**
@@ -219,10 +234,36 @@ public:
      * Example: 'ns=2;s=MyTemperature', 'nsu=http://test.org/UA/Data/;s=some.node.id'
      */
     template <typename T = TOpen62541Type>
-    typename std::enable_if<std::is_same_v<T, UA_ExpandedNodeId>>::type SetParamFromString(std::string&& exp_node_id)
+    void SetParamFromString(std::string&& exp_node_id)
+        requires(std::is_same_v<T, UA_ExpandedNodeId>)
     {
         ClearNodeIDObject();
-        UA_ExpandedNodeId_parse(m_ua_object, UA_STRING(exp_node_id.data()));
+        auto exp_node_id_tmp = std::move(exp_node_id);
+        UA_ExpandedNodeId_parse(m_ua_object, UA_STRING(exp_node_id_tmp.data()));
+        m_is_empty_object = false;
+    }
+
+    /**
+     * @brief Method for shallow copying an object and then taking ownership.
+     * If the internal object of this class is not empty, the contents will undergo deep clearing, then a shallow copy
+     * of the external object is performed (for example, structure fields by value and pointers are copied, but not data by pointers).
+     * Then, by convention, the object is taken ownership, since during the process of deleting the UATypesContainer object itself,
+     * a deep clearing of the copy of the external ua_type_obj object will be performed. Therefore, after calling this function
+     * on the ua_type_obj object, it cannot be deep cleared in the external environment using individual Open62541 library methods.
+     * @warning TOpen62541Type objects that do not contain pointers will be copied in their entirety. Such objects are safe to copy and use, but this function is meaningless.
+     * To copy such objects, use the deep copy constructor: UATypesContainer(const TOpen62541Type& ua_type_obj, u_int32_t ua_type).
+     * @warning It is recommended to create a TOpen62541Type object on the stack to automatically, shallowly delete the primary copy of ua_type_obj.
+     * @warning A copied TOpen62541Type data object cannot be deep deleted.
+     * @warning Use with extreme caution to avoid double-deleting the object or using the original object with pointers inside after using this function.
+     * @param ua_type_obj : any TOpen62541Type from the Open62541 library.
+     */
+    void ShallowCopyingAndOwnership(const TOpen62541Type& ua_type_obj)
+    {
+        if (!m_is_empty_object && !m_is_weak_ref)
+        {
+            UA_clear(m_ua_object, &UA_TYPES[m_ua_type]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+        }
+        *m_ua_object = ua_type_obj; // Поверхностное копирование без копирования других полей по указателям. Копируются только сами указатели структуры.
     }
 
 private:
@@ -235,14 +276,14 @@ private:
         {
             if (!UA_NodeId_isNull(m_ua_object))
             {
-                UA_clear(m_ua_object, &UA_TYPES[m_ua_type]);
+                UA_clear(m_ua_object, &UA_TYPES[m_ua_type]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
             }
         }
         if constexpr (std::is_same_v<TOpen62541Type, UA_ExpandedNodeId>)
         {
             if (!UA_NodeId_isNull(&m_ua_object->nodeId))
             {
-                UA_clear(m_ua_object, &UA_TYPES[m_ua_type]);
+                UA_clear(m_ua_object, &UA_TYPES[m_ua_type]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
             }
         }
     }
@@ -250,7 +291,8 @@ private:
 private:
     u_int32_t m_ua_type;
     TOpen62541Type* m_ua_object;
-    bool m_is_weak_copy = false;
+    bool m_is_weak_ref = false;
+    bool m_is_empty_object = false;
 };
 
 } // namespace nodesetexporter::open62541

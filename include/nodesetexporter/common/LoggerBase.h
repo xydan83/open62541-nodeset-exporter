@@ -72,7 +72,7 @@
 namespace nodesetexporter::common
 {
 
-enum class LogLevel : int
+enum class LogLevel : uint8_t
 {
     All = 0,
     Trace = 1,
@@ -260,7 +260,7 @@ public:
      * @brief Setting a pattern to output data in a certain sequence and with a certain set
      * @param pattern String template type pattern
      */
-    virtual void SetPattern(TString&& /*pattern*/)
+    virtual void SetPattern(TString&& /*pattern*/) // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
     {
         throw std::runtime_error("not resolve");
     };
@@ -291,7 +291,7 @@ public:
     }
 
     explicit LoggerBase(TString&& logger_name)
-        : m_logger_name(std::move(logger_name)){};
+        : m_logger_name(std::move(logger_name)) {};
     virtual ~LoggerBase() = default;
     LoggerBase(LoggerBase const&) noexcept = delete;
     LoggerBase& operator=(LoggerBase const&) = delete;

@@ -84,11 +84,11 @@ constexpr Version version
 /**
  * @brief Revision of the project in the git version control system.
  */
-constexpr std::string_view git_revision = "@IDSMART_GIT_REVISION@"; // NOLINT(readability-redundant-string-init)
+constexpr std::string_view git_revision = "@NODESETEXPORTER_GIT_REVISION@"; // NOLINT(readability-redundant-string-init)
 /**
  * @brief The project's branch in the git version control system.
  */
-constexpr std::string_view git_branch = "@IDSMART_GIT_BRANCH@"; // NOLINT(readability-redundant-string-init)
+constexpr std::string_view git_branch = "@NODESETEXPORTER_GIT_BRANCH@"; // NOLINT(readability-redundant-string-init)
 
 /**
  * @brief Build mode
@@ -118,7 +118,7 @@ struct formatter<build::Compiler> // NOLINT(readability-identifier-naming)
     template <typename FormatContext>
     auto format(build::Compiler const& compiler, FormatContext& ctx) // NOLINT(readability-identifier-naming)
     {
-        return format_to(ctx.out(), "{} {}", compiler.name, compiler.version);
+        return format_to(ctx.out(), fmt::string_view("{} {}"), compiler.name, compiler.version);
     }
 };
 
@@ -140,9 +140,9 @@ struct formatter<build::Version> // NOLINT(readability-identifier-naming)
     auto format(build::Version const& version, FormatContext& ctx) // NOLINT(readability-identifier-naming)
     {
 #ifdef PROJECT_VERSION_SUFFIX
-        return format_to(ctx.out(), "{}.{}.{}-{}", version.major, version.minor, version.patch, version.suffix);
+        return format_to(ctx.out(), fmt::string_view("{}.{}.{}-{}"), version.major, version.minor, version.patch, version.suffix);
 #else
-        return format_to(ctx.out(), "{}.{}.{}", version.major, version.minor, version.patch);
+        return format_to(ctx.out(), fmt::string_view("{}.{}.{}"), version.major, version.minor, version.patch);
 #endif
     }
 };
@@ -153,15 +153,15 @@ struct formatter<build::Version> // NOLINT(readability-identifier-naming)
 namespace build
 {
 
-inline std::ostream& operator<<(std::ostream& os_stream, Compiler const& compiler)
+inline std::ostream& operator<<(std::ostream& os_stream, Compiler const& compiler_i)
 {
-    fmt::format_to(std::ostream_iterator<std::ostream::char_type>(os_stream), "{}", compiler);
+    fmt::format_to(std::ostream_iterator<std::ostream::char_type>(os_stream), "{}", compiler_i);
     return os_stream;
 }
 
-inline std::ostream& operator<<(std::ostream& os_stream, Version const& version)
+inline std::ostream& operator<<(std::ostream& os_stream, Version const& version_i)
 {
-    fmt::format_to(std::ostream_iterator<std::ostream::char_type>(os_stream), "{}", version);
+    fmt::format_to(std::ostream_iterator<std::ostream::char_type>(os_stream), "{}", version_i);
     return os_stream;
 }
 
