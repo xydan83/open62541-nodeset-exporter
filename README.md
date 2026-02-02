@@ -45,13 +45,14 @@ MultidimensionalArrays of all specified types are also supported.
 
 Planned:
 
+⭕ Support and testing of the new version of Open62541 v1.5.x. \
+⭕ Upgrade to Conan 2 \
 ⭕ Using the Open62541 Server to collect information for export \
 ⭕ Support Definition (DataTypeDefinition) in UADataTypes \
 ⭕ Collect and export all custom data types \
 ⭕ Exporting UAView \
 ⭕ Windows build support \
-⭕ More unit tests \
-⭕ Upgrade to Conan 2
+⭕ More unit tests 
 
 ❌ UAMethods is not exported because we can't move the code \
 ❌ Nodes and types ns=0 are not exported (except custom nodes in ns=0 (**optional**))
